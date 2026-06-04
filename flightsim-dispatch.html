@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlightSim Dispatch</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap');
+:root {
+  --bg:     #1a1a1a;
+  --bg2:    #212121;
+  --bg3:    #2a2a2a;
+  --bg4:    #333333;
+  --border: rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.14);
+  --text:   #f0ede8;
+  --text2:  #b8b3aa;
+  --text3:  #7a756e;
+  --accent: #d97757;
+  --accent2:#c4623f;
+  --accent-dim: rgba(217,119,87,0.14);
+  --accent-dim2:rgba(217,119,87,0.08);
+  --green:  #5fad7e;
+  --green-dim: rgba(95,173,126,0.12);
+  --amber:  #c9a227;
+  --amber-dim: rgba(201,162,39,0.12);
+  --blue:   #7fa8d4;
+  --mono:   'Geist Mono', 'Roboto Mono', monospace;
+  --sans:   'Geist', 'Inter', -apple-system, sans-serif;
+  --r: 4px;
+  --r2: 6px;
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; overflow:hidden; }
+body { font-family:var(--sans); background:var(--bg); color:var(--text); font-size:13px; line-height:1.4; }
+
+/* ── APP SHELL ── */
+.app { display:grid; grid-template-rows:auto 1fr; height:100vh; }
+
+/* ── TITLEBAR ── */
+.titlebar { display:flex; align-items:center; gap:12px; padding:0 14px; height:36px; background:var(--bg2); border-bottom:2px solid var(--accent); flex-shrink:0; }
+.titlebar-logo { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--accent); letter-spacing:.08em; text-transform:uppercase; }
+.titlebar-sep { width:1px; height:16px; background:var(--border2); }
+.titlebar-sub { font-size:11px; color:var(--text3); font-family:var(--mono); }
+.titlebar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+.titlebar-version { font-size:10px; font-family:var(--mono); color:var(--text3); }
+#load-status { font-size:11px; font-family:var(--mono); color:var(--amber); }
+
+/* ── BODY SPLIT ── */
+.body { display:grid; grid-template-columns:380px 1fr; overflow:hidden; }
+.left { display:flex; flex-direction:column; border-right:1px solid var(--border2); overflow:hidden; background:var(--bg2); }
+.right { display:flex; flex-direction:column; overflow:hidden; }
+
+/* ── SMART SEARCH ── */
+.smart-search-wrap { padding:10px 12px 8px; border-bottom:1px solid var(--border); flex-shrink:0; min-height:0; }
+.smart-label { font-size:10px; color:var(--text3); font-weight:500; text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; }
+.smart-row { display:flex; gap:5px; }
+.smart-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--sans); font-size:12px; padding:5px 9px; outline:none; transition:border-color .15s; }
+.smart-input:focus { border-color:var(--accent); }
+.smart-input::placeholder { color:var(--text3); font-size:11px; }
+.smart-btn { background:var(--accent); border:none; border-radius:var(--r); color:#fff; font-family:var(--mono); font-size:11px; font-weight:600; padding:0 12px; cursor:pointer; transition:background .15s; letter-spacing:.04em; }
+.smart-btn:hover { background:var(--accent2); }
+.smart-tokens { display:flex; flex-wrap:wrap; gap:3px; margin-top:5px; min-height:14px; }
+.token { font-size:10px; font-family:var(--mono); padding:1px 6px; border-radius:2px; border:1px solid transparent; }
+.token-dep { background:var(--green-dim); color:var(--green); border-color:rgba(95,173,126,.25); }
+.token-arr { background:var(--amber-dim); color:var(--amber); border-color:rgba(201,162,39,.25); }
+.token-ac { background:var(--accent-dim); color:var(--accent); border-color:rgba(217,119,87,.25); }
+.token-airline { background:rgba(127,168,212,.1); color:var(--blue); border-color:rgba(127,168,212,.25); }
+.token-year { background:rgba(95,173,126,.1); color:var(--green); border-color:rgba(95,173,126,.25); }
+.token-dur { background:rgba(201,162,39,.1); color:var(--amber); border-color:rgba(201,162,39,.25); }
+.smart-hint { font-size:10px; color:var(--text3); margin-top:4px; font-family:var(--mono); }
+
+/* ── FILTERS ── */
+.filters { padding:10px 12px; overflow-y:auto; flex-shrink:1; min-height:0; max-height:62vh; }
+.fg { margin-bottom:8px; }
+.fg:last-child { margin-bottom:0; }
+.flabel { font-size:11px; color:var(--text2); font-weight:500; margin-bottom:5px; display:block; }
+.flabel-checkbox { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text); cursor:pointer; margin-bottom:3px; }
+.flabel-checkbox input[type=checkbox] { margin:0; }
+
+input[type=text], select {
+  width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r);
+  color:var(--text); font-family:var(--sans); font-size:12px; padding:4px 8px;
+  outline:none; transition:border-color .15s; appearance:none;
+}
+input[type=text]:focus, select:focus { border-color:var(--accent); }
+select {
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a756e'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 8px center; padding-right:24px;
+}
+optgroup { color:var(--text3); font-size:10px; }
+option { color:var(--text); background:var(--bg3); font-size:12px; }
+
+.icao-pair { display:grid; grid-template-columns:1fr 20px 1fr; gap:4px; align-items:center; }
+.icao-arrow { text-align:center; color:var(--text3); font-size:13px; }
+.andor-row { display:flex; gap:10px; margin-top:5px; }
+.andor-row label { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2); cursor:pointer; }
+input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:pointer; }
+.role-row { display:flex; gap:14px; }
+.role-row label { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text2); cursor:pointer; }
+
+/* ── DUAL RANGE SLIDERS ── */
+.dual-wrap { position:relative; padding:4px 0; }
+.dual-track { position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:2px; background:var(--bg4); border-radius:1px; }
+.dual-fill { position:absolute; top:50%; transform:translateY(-50%); height:2px; background:var(--accent); border-radius:1px; }
+.dual-wrap input[type=range] { position:absolute; left:0; top:50%; transform:translateY(-50%); width:100%; pointer-events:none; background:transparent; border:none; padding:0; appearance:none; -webkit-appearance:none; height:20px; }
+.dual-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:var(--accent); cursor:pointer; pointer-events:all; border:2px solid var(--bg2); }
+.dual-wrap input[type=range]::-webkit-slider-runnable-track { background:transparent; }
+.range-readout { display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono); color:var(--accent); margin-bottom:3px; }
+.range-bounds { display:flex; justify-content:space-between; font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:3px; }
+
+/* ── DEPARTS FILTER ── */
+.departs-row { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); }
+.departs-row input[type=checkbox] { margin:0; }
+.departs-row input[type=number] { width:52px; text-align:center; padding:3px 5px; font-family:var(--mono); }
+.departs-sep { color:var(--text3); }
+
+/* ── BUTTONS ── */
+.btn-row { display:flex; gap:6px; margin-top:6px; }
+.btn { flex:1; padding:5px 0; border-radius:var(--r); font-family:var(--sans); font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border2); background:var(--bg3); color:var(--text2); transition:all .15s; }
+.btn:hover { background:var(--bg4); color:var(--text); }
+.btn-primary { background:var(--accent-dim); color:var(--accent); border-color:rgba(217,119,87,.3); }
+.btn-primary:hover { background:var(--accent); color:#fff; }
+
+/* ── FLIGHT LIST (left bottom) ── */
+.results-section { flex:1; display:flex; flex-direction:column; overflow:hidden; border-top:1px solid var(--border2); min-height:80px; }
+.results-header { padding:5px 12px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; display:flex; justify-content:space-between; align-items:center; }
+.results-header-title { font-size:10px; font-family:var(--mono); font-weight:500; color:var(--text2); text-transform:uppercase; letter-spacing:.06em; }
+.results-count { font-size:10px; font-family:var(--mono); color:var(--accent); }
+.flight-list { flex:1; overflow-y:auto; }
+.flight-item { display:grid; grid-template-columns:1fr auto auto; padding:5px 12px; border-bottom:1px solid var(--border); cursor:pointer; gap:8px; align-items:center; transition:background .1s; }
+.flight-item:hover { background:var(--bg3); }
+.flight-item.active { background:var(--accent-dim2); border-left:2px solid var(--accent); padding-left:10px; }
+.fi-num { font-size:12px; font-weight:500; color:var(--text); font-family:var(--mono); }
+.fi-ac { font-size:11px; color:var(--text2); font-family:var(--mono); }
+.fi-year { font-size:10px; font-family:var(--mono); color:var(--text3); }
+
+/* ── DETAIL PANEL ── */
+.detail-panel { border-top:1px solid var(--border); padding:10px 12px; flex-shrink:0; flex-grow:1; background:var(--bg2); min-height:160px; overflow-y:auto; }
+.detail-empty { font-size:11px; color:var(--text3); font-family:var(--mono); padding:24px 0; text-align:center; }
+.detail-title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:7px; }
+.detail-route { display:flex; align-items:center; gap:8px; background:var(--bg3); border-radius:var(--r); padding:7px 10px; border:1px solid var(--border); margin-bottom:6px; }
+.dr-icao { font-family:var(--mono); font-size:15px; font-weight:600; color:var(--accent); }
+.dr-name { font-size:10px; color:var(--text3); margin-top:2px; }
+.dr-arrow { flex:1; text-align:center; color:var(--text3); font-size:14px; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.dfield { background:var(--bg3); border-radius:var(--r); padding:5px 8px; border:1px solid var(--border); }
+.dfield-label { font-size:9px; color:var(--text3); font-weight:500; text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px; }
+.dfield-val { font-size:12px; font-weight:500; color:var(--text); font-family:var(--mono); }
+.dfield-sub { font-size:10px; color:var(--text3); margin-top:1px; }
+
+/* ── RIGHT PANEL ── */
+.right-topbar { display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; flex-wrap:wrap; }
+.right-topbar select { width:auto; flex:0 0 auto; }
+.sort-label { font-size:11px; color:var(--text3); white-space:nowrap; }
+.filter-note { font-size:10px; font-family:var(--mono); color:var(--text3); margin-left:auto; }
+.filter-note span { color:var(--accent); }
+
+/* ── TABLE ── */
+.table-wrap { flex:1; overflow-y:auto; }
+.table-head {
+  display:grid;
+  grid-template-columns: 90px 70px 70px 1fr 110px 60px 62px;
+  padding:0 12px; border-bottom:1px solid var(--border2);
+  background:var(--bg2); position:sticky; top:0; z-index:2;
+}
+.th { padding:6px 4px; font-size:10px; font-family:var(--sans); font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; cursor:pointer; user-select:none; display:flex; align-items:center; gap:3px; }
+.th:hover { color:var(--text2); }
+.th.asc::after { content:' ↑'; color:var(--accent); }
+.th.desc::after { content:' ↓'; color:var(--accent); }
+.tr {
+  display:grid;
+  grid-template-columns: 90px 70px 70px 1fr 110px 60px 62px;
+  padding:0 12px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .08s; align-items:center;
+}
+.tr:hover { background:var(--bg3); }
+.tr.active { background:var(--accent-dim2); border-left:2px solid var(--accent); padding-left:10px; }
+.td { padding:5px 4px; font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.td-sub { font-size:10px; color:var(--text3); margin-top:1px; overflow:hidden; text-overflow:ellipsis; }
+.td-mono { font-family:var(--mono); }
+.badge { display:inline-block; font-size:9px; padding:1px 6px; border-radius:2px; font-family:var(--mono); font-weight:600; letter-spacing:.04em; border:1px solid transparent; }
+.badge-s { background:rgba(201,162,39,.15); color:#e0b84a; border-color:rgba(201,162,39,.3); }
+.badge-w { background:rgba(127,168,212,.12); color:#8bbfe0; border-color:rgba(127,168,212,.28); }
+
+/* ── BOTTOMBAR ── */
+.bottombar { display:flex; gap:8px; padding:7px 12px; border-top:1px solid var(--border2); background:var(--bg2); flex-shrink:0; align-items:center; }
+.bottombar .btn { flex:0 0 auto; padding:4px 16px; }
+.bottombar-stats { font-size:10px; font-family:var(--mono); color:var(--text3); margin-left:auto; }
+.bottombar-stats span { color:var(--text2); }
+
+/* ── MISC ── */
+.no-results { padding:40px 0; text-align:center; color:var(--text3); font-family:var(--mono); font-size:12px; }
+.no-results-big { font-size:28px; margin-bottom:8px; }
+.loading-overlay { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; z-index:100; }
+.loading-spinner { width:28px; height:28px; border:2px solid var(--bg4); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { font-family:var(--mono); font-size:12px; color:var(--text2); }
+.loading-sub { font-family:var(--mono); font-size:11px; color:var(--text3); }
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text3); }
+
+/* ── AIRCRAFT MULTI-SELECT ── */
+.ac-tag {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11px; font-family:var(--mono);
+  padding:3px 6px 3px 9px; border-radius:var(--r);
+  background:var(--accent-dim); color:var(--accent);
+  border:1px solid rgba(217,119,87,.35);
+}
+.ac-tag-x {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:14px; height:14px; border-radius:2px;
+  font-size:13px; line-height:1; cursor:pointer;
+  color:var(--accent); opacity:.55;
+  transition:opacity .12s, background .12s;
+}
+.ac-tag-x:hover { opacity:1; background:rgba(217,119,87,.25); }
+.ac-variant {
+  display:inline-block; font-size:10px; font-family:var(--sans);
+  padding:2px 8px; border-radius:2px; cursor:pointer;
+  border:1px solid rgba(95,173,126,.35);
+  background:var(--green-dim); color:var(--green);
+  transition:all .12s; user-select:none; white-space:nowrap;
+}
+.ac-variant:hover { filter:brightness(1.2); }
+.ac-variant.excluded {
+  background:rgba(217,119,87,.08); color:var(--accent2);
+  border-color:rgba(217,119,87,.25); text-decoration:line-through;
+  opacity:.65;
+}
+.ac-variant.excluded:hover { opacity:1; }
+</style>
+</head>
+<body>
+<div id="loading-overlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Initializing FlightSim Dispatch...</div>
+  <div class="loading-sub" id="loading-sub">953,294 routes · 1950–2024</div>
+</div>
+
+<div class="app">
+  <div class="titlebar">
+    <span class="titlebar-logo">FlightSim Dispatch</span>
+    <span class="titlebar-sep"></span>
+    <span class="titlebar-sub">v3.0 · Historical Route Database</span>
+    <div class="titlebar-right">
+      <span id="load-status"></span>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- ══ LEFT PANEL ══ -->
+    <div class="left">
+
+      <!-- Quick search -->
+      <div class="smart-search-wrap">
+        <div class="smart-row">
+          <input class="smart-input" id="smart-input" type="text"
+            placeholder='Search: "dfw mia" · "pan am 747 1970s" · "dallas london"'>
+          <button class="smart-btn" onclick="parseSmartSearch()">GO</button>
+        </div>
+        <div class="smart-tokens" id="smart-tokens"></div>
+        <div class="smart-hint" id="smart-hint">IATA · ICAO · city · airline · aircraft · decade</div>
+      </div>
+
+      <div class="filters">
+
+        <!-- Specify airport details checkbox + dep/arr -->
+        <div class="fg">
+          <label class="flabel-checkbox">
+            <input type="checkbox" id="specify-airport" checked onchange="toggleAirportFields()">
+            Specify airport details?
+          </label>
+          <div id="airport-fields">
+            <div style="font-size:11px;color:var(--text3);margin:4px 0 3px;">Departure ICAO (comma-separated for multiple)</div>
+            <input type="text" id="dep" placeholder="e.g. KDFW" oninput="queueRender()">
+            <div style="display:flex;gap:10px;margin:4px 0;">
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="andor" value="AND" checked onchange="queueRender()"> AND
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="andor" value="OR" onchange="queueRender()"> OR
+              </label>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">Arrival ICAO (comma-separated for multiple)</div>
+            <input type="text" id="arr" placeholder="e.g. KMIA" oninput="queueRender()">
+          </div>
+        </div>
+
+        <!-- Specify airlines -->
+        <div class="fg">
+          <label class="flabel-checkbox">
+            <input type="checkbox" id="specify-airline" onchange="toggleAirlineField()">
+            Specify airlines? Enter ICAO code (e.g. BAW). Comma-separated.
+          </label>
+          <div id="airline-field" style="display:none;margin-top:4px;">
+            <input type="text" id="airline-icao" placeholder="e.g. AAL, BAW, DLH" oninput="queueRender()">
+          </div>
+        </div>
+
+        <!-- Role -->
+        <div class="fg">
+          <div class="flabel">Role</div>
+          <div class="role-row">
+            <label><input type="checkbox" id="pax" checked onchange="queueRender()"> PAX</label>
+            <label><input type="checkbox" id="cargo" checked onchange="queueRender()"> Cargo</label>
+          </div>
+        </div>
+
+        <!-- Aircraft family multi-select -->
+        <div class="fg">
+          <div class="flabel">Aircraft family</div>
+          <select id="ac-family-picker" onchange="acFamilyAdd(this)">
+            <option value="">— add aircraft family —</option>
+            <optgroup label="─── Airbus ───">
+              <option value="Aerospatiale/BAC Concorde">Aerospatiale/BAC Concorde</option>
+              <option value="Airbus A220">Airbus A220/Bombardier CS</option>
+              <option value="Airbus A300">Airbus A300</option>
+              <option value="Airbus A310">Airbus A310</option>
+              <option value="Airbus A318">Airbus A318</option>
+              <option value="Airbus A319">Airbus A319</option>
+              <option value="Airbus A320">Airbus A32X CEO</option>
+              <option value="Airbus A321">Airbus A32X NEO</option>
+              <option value="Airbus A330">Airbus A330 CEO</option>
+              <option value="Airbus A330 NEO">Airbus A330 NEO</option>
+              <option value="Airbus A340">Airbus A340</option>
+              <option value="Airbus A350">Airbus A350</option>
+              <option value="Airbus A380">Airbus A380</option>
+            </optgroup>
+            <optgroup label="─── Boeing ───">
+              <option value="Boeing 707">Boeing 707</option>
+              <option value="Boeing 717">Boeing 717</option>
+              <option value="Boeing 727">Boeing 727</option>
+              <option value="Boeing 737-100">Boeing 737 Original (-100 and -200)</option>
+              <option value="Boeing 737-300">Boeing 737 Classic (-300 to -500)</option>
+              <option value="Boeing 737-600">Boeing 737 NG (600-900)</option>
+              <option value="Boeing 737 MAX">Boeing 737 MAX</option>
+              <option value="Boeing 747-100">Boeing 747 Classic</option>
+              <option value="Boeing 747-400">Boeing 747 NG</option>
+              <option value="Boeing 757">Boeing 757</option>
+              <option value="Boeing 767">Boeing 767</option>
+              <option value="Boeing 777">Boeing 777</option>
+              <option value="Boeing 787">Boeing 787</option>
+            </optgroup>
+            <optgroup label="─── Douglas / McDonnell Douglas ───">
+              <option value="Douglas DC-8">Douglas DC-8</option>
+              <option value="Douglas DC-9">Douglas DC-9</option>
+              <option value="Douglas DC-10">Douglas DC-10</option>
+              <option value="McDonnell Douglas MD-11">McDonnell Douglas MD-11</option>
+              <option value="McDonnell Douglas MD-8">McDonnell Douglas MD-80</option>
+              <option value="McDonnell Douglas MD-90">McDonnell Douglas MD-90</option>
+            </optgroup>
+            <optgroup label="─── Lockheed ───">
+              <option value="Lockheed Constellation">Lockheed Constellation</option>
+              <option value="Lockheed Electra">Lockheed Electra</option>
+              <option value="Lockheed L-1011">Lockheed L-1011 TriStar</option>
+            </optgroup>
+            <optgroup label="─── British ───">
+              <option value="BAC One-Eleven">BAC One-Eleven</option>
+              <option value="BAe 146">BAe 146 / Avro RJ</option>
+              <option value="Vickers VC">Vickers VC10</option>
+            </optgroup>
+            <optgroup label="─── Soviet / Russian ───">
+              <option value="Ilyushin Il-62">Ilyushin Il-62</option>
+              <option value="Ilyushin Il-86">Ilyushin Il-86</option>
+              <option value="Ilyushin Il-96">Ilyushin Il-96</option>
+              <option value="Tupolev Tu-134">Tupolev Tu-134</option>
+              <option value="Tupolev Tu-154">Tupolev Tu-154</option>
+            </optgroup>
+            <optgroup label="─── Regional ───">
+              <option value="ATR">ATR 42/72</option>
+              <option value="Bombardier CRJ">Bombardier CRJ</option>
+              <option value="Convair">Convair 880/990</option>
+              <option value="de Havilland Canada Dash 8">De Havilland Dash 8</option>
+              <option value="Embraer ERJ">Embraer ERJ</option>
+              <option value="Embraer E1">Embraer E-Jet 1st Gen</option>
+              <option value="Embraer E2">Embraer E-Jet 2nd Gen</option>
+              <option value="Fokker">Fokker</option>
+            </optgroup>
+          </select>
+          <!-- Selected family tags -->
+          <div id="ac-family-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;min-height:4px;"></div>
+          <!-- Variant subtype panel -->
+          <div id="ac-variant-panel" style="display:none;margin-top:6px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg3);max-height:160px;overflow-y:auto;">
+            <div style="padding:4px 8px;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+              <span>Subtypes — click to exclude</span>
+              <span id="ac-variant-count" style="color:var(--accent);"></span>
+            </div>
+            <div id="ac-variant-list" style="padding:5px;display:flex;flex-wrap:wrap;gap:3px 4px;"></div>
+          </div>
+        </div>
+
+        <!-- Duration slider -->
+        <div class="fg">
+          <div class="flabel">Flight Duration (hrs):</div>
+          <div class="range-readout"><span id="dur-lo-v">0</span><span id="dur-hi-v">22</span></div>
+          <div class="dual-wrap" style="height:20px;">
+            <div class="dual-track"></div>
+            <div class="dual-fill" id="dur-fill"></div>
+            <input type="range" id="dur-lo" min="0" max="22" value="0" step="1">
+            <input type="range" id="dur-hi" min="0" max="22" value="22" step="1">
+          </div>
+          <div class="range-bounds"><span>0</span><span>22</span></div>
+        </div>
+
+        <!-- Year slider -->
+        <div class="fg">
+          <div class="flabel">Flight Year:</div>
+          <div class="range-readout"><span id="yr-lo-v">1950</span><span id="yr-hi-v">2024</span></div>
+          <div class="dual-wrap" style="height:20px;">
+            <div class="dual-track"></div>
+            <div class="dual-fill" id="yr-fill"></div>
+            <input type="range" id="yr-lo" min="1950" max="2024" value="1950" step="1">
+            <input type="range" id="yr-hi" min="1950" max="2024" value="2024" step="1">
+          </div>
+          <div class="range-bounds"><span>1950</span><span>2025</span></div>
+        </div>
+
+        <!-- Departs in next X minutes -->
+        <div class="fg">
+          <div class="departs-row">
+            <input type="checkbox" id="departs-enable" onchange="queueRender()">
+            <span>Departs in the next</span>
+            <input type="number" id="departs-lo" value="45" min="0" max="1439" onchange="queueRender()">
+            <span class="departs-sep">-</span>
+            <input type="number" id="departs-hi" value="60" min="0" max="1439" onchange="queueRender()">
+            <span>minutes</span>
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-bottom:8px;">
+          <button class="btn btn-primary" onclick="randomFlight()">Random Flight</button>
+          <button class="btn" onclick="resetAll()">Reset All</button>
+        </div>
+      </div>
+
+      <!-- Detail panel -->
+      <div class="detail-panel" id="detail-panel">
+        <div class="detail-empty">Select a flight to view route details</div>
+      </div>
+
+    </div>
+
+    <!-- ══ RIGHT PANEL ══ -->
+    <div class="right">
+      <div class="right-topbar">
+        <span class="sort-label">Sort:</span>
+        <select id="sort-sel" style="width:180px;" onchange="setSort(this.value)">
+          <option value="airline">Airline</option>
+          <option value="dep">Departure</option>
+          <option value="arr">Arrival</option>
+          <option value="ac">Aircraft</option>
+          <option value="dur-asc">Duration (short first)</option>
+          <option value="dur-desc">Duration (long first)</option>
+          <option value="year-asc">Year (oldest first)</option>
+          <option value="year-desc">Year (newest first)</option>
+        </select>
+        <span class="filter-note" id="filter-note"></span>
+      </div>
+
+      <div class="table-head">
+        <div class="th" id="th-airline" onclick="setSort('airline')">Airline</div>
+        <div class="th" id="th-dep"     onclick="setSort('dep')">From</div>
+        <div class="th" id="th-arr"     onclick="setSort('arr')">To</div>
+        <div class="th" id="th-ac"      onclick="setSort('ac')">Aircraft</div>
+        <div class="th"                 onclick="setSort('dep')">Dep / Arr</div>
+        <div class="th" id="th-dur"     onclick="setSort('dur-asc')">Dur.</div>
+        <div class="th" id="th-year"    onclick="setSort('year-asc')">Year</div>
+      </div>
+
+      <div class="table-wrap" id="table-wrap">
+        <div class="no-results" style="padding:60px 0;"><div class="no-results-big">⟳</div>Loading...</div>
+      </div>
+
+      <div class="bottombar">
+        <button class="btn" onclick="randomFlight()">Random Flight</button>
+        <button class="btn" onclick="queueRender()">Refresh Table</button>
+        <span class="bottombar-stats" id="bottombar-stats"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Data loaded at runtime from Cloudflare Worker
+const AP_MAP = {};
+const AL_MAP = {};
+const AC_MAP = {};
+const CITY_MAP = {};
+let ROUTES_B64_VALUE = "";
+
+// ── EMBEDDED DATA ──
+
+// ── STATE ──
+let DB = [];
+// ── AIRCRAFT MULTI-SELECT STATE ──
+let selAcFamilies = new Set();   // e.g. {"Boeing 747-400", "Airbus A320"}
+let excludedVariants = new Set(); // ac codes user has clicked off
+let IDX_DEP = new Map();   // dep ICAO -> [i, ...]
+let IDX_ARR = new Map();   // arr ICAO -> [i, ...]
+let IDX_AL  = new Map();   // airline  -> [i, ...]
+let sortCol = "airline", sortDir = "asc";
+let selRoute = null, selFlightIdx = null;
+let renderTimer = null;
+let sliderTimer = null;
+
+// ── DECOMPRESS + PARSE ──
+async function loadData() {
+  const loadText = document.getElementById('loading-text');
+  loadText.textContent = 'Fetching route database...';
+  await new Promise(r => setTimeout(r, 10));
+
+  let dataText;
+  try {
+    const res = await fetch('https://fsd-data.vorahamaad.workers.dev', {
+      headers: { 'X-FSD-Key': 'fsd-9x2Kp$vR#mQ7wL@nT4hZ' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    dataText = await res.text();
+  } catch (err) {
+    loadText.textContent = 'Failed to load data: ' + err.message;
+    console.error('Data fetch failed:', err);
+    return;
+  }
+
+  loadText.textContent = 'Initialising database...';
+  await new Promise(r => setTimeout(r, 10));
+
+  // Execute the data script in this scope so AP_MAP, AL_MAP, AC_MAP,
+  // CITY_MAP and ROUTES_B64 become available as local variables.
+  const dataFn = new Function(dataText + '\nreturn {AP_MAP,AL_MAP,AC_MAP,CITY_MAP,ROUTES_B64};');
+  const data = dataFn();
+  // Assign into the outer scope variables the rest of the app uses
+  Object.assign(AP_MAP, data.AP_MAP);
+  Object.assign(AL_MAP, data.AL_MAP);
+  Object.assign(AC_MAP, data.AC_MAP);
+  Object.assign(CITY_MAP, data.CITY_MAP);
+  ROUTES_B64_VALUE = data.ROUTES_B64;
+
+  loadText.textContent = 'Decompressing route database...';
+  await new Promise(r => setTimeout(r, 10));
+  
+  // Decode base64
+  const binaryStr = atob(ROUTES_B64_VALUE);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  
+  // Decompress gzip
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+  writer.write(bytes);
+  writer.close();
+  
+  const chunks = [];
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  const text = new TextDecoder().decode(result);
+  
+  loadText.textContent = 'Parsing 604,530 routes...';
+  await new Promise(r => setTimeout(r, 10));
+  
+  // Parse pipe-delimited: AL|DEP|ARR|AC|DUR|YEAR|SEASON
+  const lines = text.split('\n');
+  DB = [];
+  for (let i = 0; i < lines.length; i++) {
+    const p = lines[i].split('|');
+    if (p.length < 7) continue;
+    const acCode = p[3];
+    const acFull = AC_MAP[acCode] || acCode;
+    DB.push({
+      airline: p[0],
+      dep: p[1],
+      arr: p[2],
+      ac: acCode,
+      acLabel: acFull,
+      year: parseInt(p[4]),
+      season: p[5],
+      dur: parseFloat(p[6]),
+      fns: p[7] || '',
+      depTime: p[8] || '',
+      arrTime: p[9] || '',
+    });
+  }
+  
+  // Build indexes
+  for (let i = 0; i < DB.length; i++) {
+    const r = DB[i];
+    if (!IDX_DEP.has(r.dep)) IDX_DEP.set(r.dep, []);
+    IDX_DEP.get(r.dep).push(i);
+    if (!IDX_ARR.has(r.arr)) IDX_ARR.set(r.arr, []);
+    IDX_ARR.get(r.arr).push(i);
+    if (!IDX_AL.has(r.airline)) IDX_AL.set(r.airline, []);
+    IDX_AL.get(r.airline).push(i);
+  }
+  loadText.textContent = `Loaded ${DB.length.toLocaleString()} routes`;
+  await new Promise(r => setTimeout(r, 200));
+  document.getElementById('loading-overlay').style.display = 'none';
+  document.getElementById('load-status').textContent = DB.length.toLocaleString() + ' routes';
+  renderTable();
+}
+
+// ── UTILITY ──
+function pct(v, min, max) { return ((v-min)/(max-min)*100).toFixed(2)+'%'; }
+function formatDur(mins) {
+  const m = parseInt(mins) || 0;
+  const hrs = Math.floor(m / 60);
+  const rem = m % 60;
+  return hrs+'h'+(rem>0?' '+rem+'m':'');
+}
+function alName(code) { return AL_MAP[code] || code; }
+function apInfo(icao) { return AP_MAP[icao] || [icao,'','']; }
+
+// ── DUAL RANGE ──
+function setupDual(loId, hiId, loOutId, hiOutId, fillId, min, max, suffix) {
+  const lo = document.getElementById(loId), hi = document.getElementById(hiId);
+  function sync() {
+    let lv = parseInt(lo.value), hv = parseInt(hi.value);
+    if (lv > hv) { if (document.activeElement===lo) lo.value=hv; else hi.value=lv; }
+    lv = parseInt(lo.value); hv = parseInt(hi.value);
+    document.getElementById(loOutId).textContent = lv+(suffix||'');
+    document.getElementById(hiOutId).textContent = hv+(suffix||'');
+    document.getElementById(fillId).style.left = pct(lv,min,max);
+    document.getElementById(fillId).style.width = ((hv-lv)/(max-min)*100).toFixed(2)+'%';
+    queueRenderSlow();
+  }
+  lo.addEventListener('input', sync);
+  hi.addEventListener('input', sync);
+  sync();
+}
+
+// ── FILTERS ──
+// Quick search state — independent of filter UI
+let qs = { deps:[], arrs:[], airlines:[], acFamily:null, yearLo:null, yearHi:null, durHi:null };
+
+function getFilters() {
+  const deps = document.getElementById('dep').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  const arrs = document.getElementById('arr').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  const airlines = document.getElementById('airline-icao').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  return {
+    deps, arrs,
+    airlines,
+    airlineSet: new Set(airlines),
+    andor: document.querySelector('input[name=andor]:checked').value,
+    acFam: 'all',                          // legacy — not used anymore
+    acFamilies: [...selAcFamilies],        // array of selected family strings
+    excludedVariants: new Set(excludedVariants),
+    durLo: parseFloat(document.getElementById('dur-lo').value) * 60,
+    durHi: parseFloat(document.getElementById('dur-hi').value) * 60,
+    yrLo: parseInt(document.getElementById('yr-lo').value),
+    yrHi: parseInt(document.getElementById('yr-hi').value),
+    departsEnable: document.getElementById('departs-enable').checked,
+    departsLo: parseInt(document.getElementById('departs-lo').value) || 0,
+    departsHi: parseInt(document.getElementById('departs-hi').value) || 60,
+  };
+}
+
+function hasActiveFilters(fi) {
+  const sliderDefault = fi.durLo === 0 && fi.durHi === 22*60 && fi.yrLo === 1950 && fi.yrHi === 2024;
+  const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && !fi.departsEnable;
+  const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamily && qs.yearLo === null && qs.durHi === null;
+  return !(noManual && noQS);
+}
+
+function matchesFilters(f, fi) {
+  // Manual filters
+  if (fi.acFamilies.length) {
+    const label = f.acLabel || '';
+    if (!fi.acFamilies.some(fam => label.includes(fam))) return false;
+  }
+  if (fi.excludedVariants.size && fi.excludedVariants.has(f.ac)) return false;
+  if (fi.airlineSet.size && !fi.airlineSet.has(f.airline)) return false;
+  if (f.dur < fi.durLo || f.dur > fi.durHi) return false;
+  if (f.year < fi.yrLo || f.year > fi.yrHi) return false;
+  if (fi.deps.length || fi.arrs.length) {
+    const dm = fi.deps.length===0 || fi.deps.some(d => f.dep.startsWith(d));
+    const am = fi.arrs.length===0 || fi.arrs.some(a => f.arr.startsWith(a));
+    if (fi.andor==='AND') { if (!dm || !am) return false; }
+    else { if (!dm && !am) return false; }
+  }
+  // Quick search state (independent)
+  if (qs.deps.length) { if (!qs.deps.some(d => f.dep === d)) return false; }
+  if (qs.arrs.length) { if (!qs.arrs.some(a => f.arr === a)) return false; }
+  if (qs.airlineSet && qs.airlineSet.size) { if (!qs.airlineSet.has(f.airline)) return false; }
+  if (qs.acFamily) { if (!(f.acLabel||'').includes(qs.acFamily)) return false; }
+  if (qs.yearLo !== null) { if (f.year < qs.yearLo || f.year > (qs.yearHi||qs.yearLo)) return false; }
+  if (qs.durHi !== null) { if (f.dur > qs.durHi) return false; }
+  // Departs in next X minutes (uses current UTC minutes-of-day)
+  if (fi.departsEnable && f.depTime) {
+    const now = new Date();
+    const nowMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const dt = parseInt(f.depTime.slice(0,2)) * 60 + parseInt(f.depTime.slice(2));
+    const diff = (dt - nowMins + 1440) % 1440;
+    if (diff < fi.departsLo || diff > fi.departsHi) return false;
+  }
+  return true;
+}
+
+function getSorted(arr) {
+  const LIMIT = 2500;
+  const cmp = (() => {
+    if (sortCol==='dur-asc'||sortCol==='dur-desc') return (a,b)=>a.dur-b.dur;
+    if (sortCol==='year-asc'||sortCol==='year-desc') return (a,b)=>a.year-b.year;
+    return (a,b)=>{const va=(a[sortCol]||'').toString(),vb=(b[sortCol]||'').toString();return va<vb?-1:va>vb?1:0;};
+  })();
+  const dir = (sortCol.endsWith('desc')||sortDir==='desc') ? -1 : 1;
+  if (arr.length <= LIMIT) return arr.slice().sort((a,b)=>dir*cmp(a,b));
+  // For large result sets, do a quick tournament to find top LIMIT
+  // rather than sorting 400k rows: sample evenly then sort the sample
+  const SAMPLE = Math.min(arr.length, LIMIT * 4);
+  const step = Math.floor(arr.length / SAMPLE);
+  const sampled = [];
+  for (let i = 0; i < arr.length; i += step) sampled.push(arr[i]);
+  sampled.sort((a,b)=>dir*cmp(a,b));
+  return sampled.slice(0, LIMIT);
+}
+
+
+// ── AIRCRAFT MULTI-SELECT LOGIC ──
+
+function acFamilyAdd(sel) {
+  const val = sel.value;
+  if (!val) return;
+  sel.value = '';
+  if (selAcFamilies.has(val)) return; // already added
+  selAcFamilies.add(val);
+  renderAcTags();
+  renderAcVariants();
+  queueRender();
+}
+
+function acFamilyRemove(val) {
+  selAcFamilies.delete(val);
+  // clean up any excluded variants that belonged to this family
+  for (const code of [...excludedVariants]) {
+    const label = AC_MAP[code] || '';
+    if (label.includes(val)) excludedVariants.delete(code);
+  }
+  renderAcTags();
+  renderAcVariants();
+  queueRender();
+}
+
+function acVariantToggle(code) {
+  if (excludedVariants.has(code)) excludedVariants.delete(code);
+  else excludedVariants.add(code);
+  // update chip style
+  const chip = document.querySelector(`.ac-variant[data-code="${code}"]`);
+  if (chip) chip.classList.toggle('excluded', excludedVariants.has(code));
+  updateVariantCount();
+  queueRender();
+}
+
+function renderAcTags() {
+  const wrap = document.getElementById('ac-family-tags');
+  wrap.innerHTML = [...selAcFamilies].map(fam => {
+    const opt = document.querySelector(`#ac-family-picker option[value="${fam.replace(/"/g,'&quot;')}"]`);
+    const label = opt ? opt.textContent : fam;
+    // encode fam for safe inline onclick
+    const safeFam = encodeURIComponent(fam);
+    return `<span class="ac-tag"><span>${label}</span><span class="ac-tag-x" title="Remove" onclick="acFamilyRemove(decodeURIComponent('${safeFam}'))">×</span></span>`;
+  }).join('');
+}
+
+function renderAcVariants() {
+  const panel = document.getElementById('ac-variant-panel');
+  const list  = document.getElementById('ac-variant-list');
+  if (!selAcFamilies.size) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  // Build variants from AC_MAP (fast — no DB scan needed)
+  const famsArr = [...selAcFamilies];
+  const variants = [];
+  for (const [code, label] of Object.entries(AC_MAP)) {
+    if (famsArr.some(fam => label.includes(fam))) {
+      variants.push({ code, label });
+    }
+  }
+  variants.sort((a,b) => a.label.localeCompare(b.label));
+
+  list.innerHTML = variants.map(v => {
+    const excl = excludedVariants.has(v.code);
+    return `<span class="ac-variant${excl?' excluded':''}" data-code="${v.code}" onclick="acVariantToggle('${v.code}')" title="${v.code}">${v.label}</span>`;
+  }).join('');
+
+  updateVariantCount();
+}
+
+function updateVariantCount() {
+  const chips = document.querySelectorAll('.ac-variant');
+  const total = chips.length;
+  const excl  = excludedVariants.size;
+  const el = document.getElementById('ac-variant-count');
+  if (el) el.textContent = excl > 0 ? `${total - excl}/${total} active` : `${total} active`;
+}
+
+function queueRender(delay) {
+  if (!DB.length) return;
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderTable, delay || 80);
+}
+function queueRenderSlow() { queueRender(300); }  // for sliders
+
+function renderTable() {
+  if (!DB.length) return;
+  const fi = getFilters();
+
+  // Show empty state if no filters active
+  const wrap = document.getElementById('table-wrap');
+  if (!hasActiveFilters(fi)) {
+    document.getElementById('filter-note').innerHTML = `<span>${DB.length.toLocaleString()}</span> routes loaded`;
+    document.getElementById('bottombar-stats').innerHTML = '';
+    wrap.innerHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">✈</div>Enter filters or use Quick Search to find routes</div>';
+    return;
+  }
+
+  // Use indexes for dep/arr/airline to avoid full scan when possible
+  let candidates = null;
+
+  const useDepIdx = fi.deps.length > 0;
+  const useArrIdx = fi.arrs.length > 0;
+  const useAlIdx  = fi.airlineSet.size > 0;
+
+  if (useDepIdx || useArrIdx || useAlIdx) {
+    let sets = [];
+    if (useDepIdx) {
+      const s = new Set();
+      fi.deps.forEach(d => (IDX_DEP.get(d)||[]).forEach(i => s.add(i)));
+      sets.push({s, role:'dep'});
+    }
+    if (useArrIdx) {
+      const s = new Set();
+      fi.arrs.forEach(a => (IDX_ARR.get(a)||[]).forEach(i => s.add(i)));
+      sets.push({s, role:'arr'});
+    }
+    if (useAlIdx) {
+      const s = new Set();
+      fi.airlineSet.forEach(a => (IDX_AL.get(a)||[]).forEach(i => s.add(i)));
+      sets.push({s, role:'al'});
+    }
+
+    if (fi.andor === 'AND' && useDepIdx && useArrIdx) {
+      // Intersect dep and arr sets
+      const depSet = sets.find(x=>x.role==='dep').s;
+      const arrSet = sets.find(x=>x.role==='arr').s;
+      const intersection = new Set();
+      depSet.forEach(i => { if (arrSet.has(i)) intersection.add(i); });
+      let result = intersection;
+      if (useAlIdx) {
+        const alSet = sets.find(x=>x.role==='al').s;
+        const inter2 = new Set();
+        result.forEach(i => { if (alSet.has(i)) inter2.add(i); });
+        result = inter2;
+      }
+      candidates = [...result].map(i => DB[i]);
+    } else {
+      // Union (OR) or only one index active
+      const union = new Set();
+      sets.forEach(({s}) => s.forEach(i => union.add(i)));
+      candidates = [...union].map(i => DB[i]);
+    }
+  } else {
+    candidates = DB;
+  }
+
+  // Apply remaining filters (year, duration, acFam, qs, departs)
+  const filtered = candidates.filter(f => matchesFilters(f, fi));
+
+  const shown = getSorted(filtered).slice(0, 2500);
+  const more = filtered.length - shown.length;
+
+  document.getElementById('filter-note').innerHTML =
+    `<span>${filtered.length.toLocaleString()}</span> shown · <span>${(DB.length - filtered.length).toLocaleString()}</span> filtered`;
+
+  // Compute stats in one pass
+  const _als = new Set(), _pairs = new Set();
+  for (const r of filtered) { _als.add(r.airline); _pairs.add(r.dep+r.arr); }
+  document.getElementById('bottombar-stats').innerHTML =
+    `<span>${filtered.length.toLocaleString()}</span> routes · ` +
+    `<span>${_als.size}</span> airlines · ` +
+    `<span>${_pairs.size.toLocaleString()}</span> city pairs`;
+
+  ['airline','dep','arr','ac'].forEach(c => {
+    const el = document.getElementById('th-'+c);
+    if (el) el.className = 'th' + (sortCol===c ? ' '+(sortDir==='asc'?'asc':'desc') : '');
+  });
+
+  if (!shown.length) {
+    wrap.innerHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">∅</div>No routes match the current filters.</div>';
+    return;
+  }
+
+  wrap.innerHTML = shown.map(f => {
+    const apDep = AP_MAP[f.dep];
+    const apArr = AP_MAP[f.arr];
+    const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,14) : f.dep;
+    const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,14) : f.arr;
+    const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
+                     selRoute.airline===f.airline && selRoute.ac===f.ac;
+    const seasonBadge = f.season==='S' ? '<span class="badge badge-s">SUMMER</span>' : f.season==='W' ? '<span class="badge badge-w">WINTER</span>' : '';
+    const fnNums = f.fns ? f.fns.split(',').map(n => f.airline+n).join(', ') : '';
+    const depTimeStr = f.depTime ? f.depTime.slice(0,2)+':'+f.depTime.slice(2) : '';
+    const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
+    return `<div class="tr${isActive?' active':''}">
+      <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
+      <div class="td td-mono">${f.dep}<div class="td-sub">${depCity}</div></div>
+      <div class="td td-mono">${f.arr}<div class="td-sub">${arrCity}</div></div>
+      <div class="td">${f.acLabel.substring(0,22)}<div class="td-sub td-mono">${f.ac}</div></div>
+      <div class="td td-mono">${depTimeStr ? depTimeStr+'<span style="opacity:.5;"> → </span>'+arrTimeStr : ''}</div>
+      <div class="td td-mono">${formatDur(f.dur)}</div>
+      <div class="td td-mono">${f.year} ${seasonBadge}</div>
+    </div>`;
+  }).join('') + (more > 0
+    ? `<div class="no-results" style="padding:14px;font-size:11px;font-family:var(--mono);">+${more.toLocaleString()} more — refine filters to narrow results</div>`
+    : '');
+
+  wrap.querySelectorAll('.tr').forEach((el, i) => {
+    el.onclick = () => selectRoute(shown[i]);
+  });
+}
+
+
+function selectRoute(f) {
+  // clicking the already-selected route deselects it
+  if (selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
+      selRoute.airline===f.airline && selRoute.ac===f.ac) {
+    selRoute = null;
+    selFlightIdx = null;
+    document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
+    renderTable();
+    return;
+  }
+  selRoute = f;
+  selFlightIdx = 0;
+  showDetail(f);
+  renderTable();
+}
+
+function showDetail(f) {
+  const depA = AP_MAP[f.dep] || [f.dep,'',''];
+  const arrA = AP_MAP[f.arr] || [f.arr,'',''];
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-title">${AL_MAP[f.airline]||f.airline} (${f.airline}) · ${f.year} ${f.season==='S'?'Summer':f.season==='W'?'Winter':''}</div>
+    <div class="detail-route">
+      <div><div class="dr-icao">${f.dep}</div><div class="dr-name">${(depA[0]||'').substring(0,28)}</div><div class="dr-name">${depA[1]||''}</div></div>
+      <div class="dr-arrow">→</div>
+      <div><div class="dr-icao">${f.arr}</div><div class="dr-name">${(arrA[0]||'').substring(0,28)}</div><div class="dr-name">${arrA[1]||''}</div></div>
+    </div>
+    <div class="detail-grid">
+      <div class="dfield"><div class="dfield-label">Aircraft</div><div class="dfield-val td-mono">${f.ac}</div><div class="dfield-sub">${f.acLabel}</div></div>
+      <div class="dfield"><div class="dfield-label">Block time</div><div class="dfield-val">${formatDur(f.dur)}</div></div>
+      <div class="dfield"><div class="dfield-label">Year · Season</div><div class="dfield-val">${f.year} · ${f.season==='S'?'Summer':f.season==='W'?'Winter':'Other'}</div></div>
+      <div class="dfield"><div class="dfield-label">Sched dep / arr</div><div class="dfield-val td-mono">${(f.depTime && f.arrTime) ? f.depTime.slice(0,2)+':'+f.depTime.slice(2)+' → '+f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '—'}</div></div>
+      ${f.fns ? `<div class="dfield" style="grid-column:1/-1"><div class="dfield-label">Flight number(s)</div><div class="dfield-val td-mono" style="white-space:normal;word-break:break-word;font-size:11px;">${f.fns.split(',').map(n=>f.airline+n).join('  ·  ')}</div></div>` : ''}
+    </div>
+  `;
+}
+
+// ── SORT ──
+function setSort(v) {
+  if (sortCol===v) { sortDir = sortDir==='asc'?'desc':'asc'; }
+  else { sortCol=v; sortDir=v.endsWith('desc')?'desc':'asc'; }
+  document.getElementById('sort-sel').value = v;
+  queueRender();
+}
+
+// ── RANDOM ──
+function randomFlight() {
+  if (!DB.length) return;
+  const fi = getFilters();
+  const filtered = DB.filter(f => matchesFilters(f, fi));
+  if (!filtered.length) return;
+  selectRoute(filtered[Math.floor(Math.random()*filtered.length)]);
+}
+
+// ── RESET ──
+function toggleAirportFields() {
+  const on = document.getElementById('specify-airport').checked;
+  document.getElementById('airport-fields').style.display = on ? '' : 'none';
+  if (!on) { document.getElementById('dep').value=''; document.getElementById('arr').value=''; }
+  queueRender();
+}
+function toggleAirlineField() {
+  const on = document.getElementById('specify-airline').checked;
+  document.getElementById('airline-field').style.display = on ? '' : 'none';
+  if (!on) document.getElementById('airline-icao').value = '';
+  queueRender();
+}
+function resetAll() {
+  document.getElementById('dep').value='';
+  document.getElementById('arr').value='';
+  document.getElementById('airline-icao').value='';
+  selAcFamilies.clear();
+  excludedVariants.clear();
+  renderAcTags();
+  renderAcVariants();
+  document.getElementById('ac-family-picker').value='';
+  document.getElementById('dur-lo').value=0;
+  document.getElementById('dur-hi').value=22;
+  document.getElementById('yr-lo').value=1950;
+  document.getElementById('yr-hi').value=2024;
+  document.getElementById('specify-airport').checked=true;
+  document.getElementById('airport-fields').style.display='';
+  document.getElementById('specify-airline').checked=false;
+  document.getElementById('airline-field').style.display='none';
+  document.getElementById('departs-enable').checked=false;
+  document.getElementById('departs-lo').value=45;
+  document.getElementById('departs-hi').value=60;
+  document.getElementById('pax').checked=true;
+  document.getElementById('cargo').checked=true;
+  document.querySelectorAll('input[name=andor]')[0].checked=true;
+  document.getElementById('smart-input').value='';
+  document.getElementById('smart-tokens').innerHTML='';
+  document.getElementById('smart-hint').textContent='IATA · ICAO · city · airline · aircraft · decade';
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+  setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
+  setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
+  selRoute=null; selFlightIdx=null;
+  queueRender();
+  document.getElementById('detail-panel').innerHTML='<div class="detail-empty">Select a flight to view route details</div>';
+}
+
+// ── SMART SEARCH ──
+const ICAO_AP_SET = new Set(Object.keys(AP_MAP));
+const ICAO_AL_SET = new Set(Object.keys(AL_MAP));
+
+
+const AC_ALIASES = {
+  '741':['Boeing 747-100'],'742':['Boeing 747-200'],'743':['Boeing 747-300'],'744':['Boeing 747-400'],
+  '748':['Boeing 747-8'],'74s':['Boeing 747SP'],'747':['Boeing 747'],
+  'b747':['Boeing 747'],'b742':['Boeing 747-200'],'b741':['Boeing 747-100'],'b744':['Boeing 747-400'],
+  '721':['Boeing 727'],'722':['Boeing 727'],'727':['Boeing 727'],'b727':['Boeing 727'],
+  '737':['Boeing 737'],'b737':['Boeing 737'],'b738':['Boeing 737-800'],
+  '737ng':['Boeing 737-'],'737max':['Boeing 737 MAX'],'737classic':['Boeing 737-3'],
+  '707':['Boeing 707'],'720':['Boeing 720'],
+  '752':['Boeing 757'],'753':['Boeing 757'],'757':['Boeing 757'],
+  '767':['Boeing 767'],'763':['Boeing 767'],'762':['Boeing 767'],
+  '777':['Boeing 777'],'77w':['Boeing 777'],'772':['Boeing 777'],
+  '787':['Boeing 787'],'788':['Boeing 787'],'789':['Boeing 787'],
+  'dc8':['Douglas DC-8'],'dc9':['Douglas DC-9'],'dc10':['Douglas DC-10'],
+  'md11':['McDonnell Douglas MD-11'],'md80':['McDonnell Douglas MD-8'],
+  'l1011':['Lockheed L-1011'],'tristar':['Lockheed L-1011'],
+  'a320':['Airbus A320'],'a319':['Airbus A319'],'a321':['Airbus A321'],
+  'a32x':['Airbus A32'],'a330':['Airbus A330'],'a340':['Airbus A340'],
+  'a350':['Airbus A350'],'a380':['Airbus A380'],
+  'concorde':['Concorde'],
+};
+
+const AIRLINE_ALIASES = {
+  'panam':['PAA'],'pan am':['PAA'],'pan american':['PAA'],
+  'twa':['TWA'],'trans world':['TWA'],
+  'british airways':['BAW'],'british':['BAW'],
+  'lufthansa':['DLH'],
+  'american airlines':['AAL'],'american':['AAL'],
+  'united airlines':['UAL'],'united':['UAL'],
+  'delta':['DAL'],'delta air lines':['DAL'],
+  'southwest':['SWA'],'southwest airlines':['SWA'],
+  'eastern':['EAL'],'braniff':['BNF'],
+  'northwest':['NWA'],'northwest orient':['NWA'],
+  'singapore airlines':['SIA'],'singapore':['SIA'],
+  'qantas':['QFA'],
+  'japan air':['JAL'],'jal':['JAL'],
+  'korean air':['KAL'],
+  'emirates':['UAE'],
+  'air france':['AFR'],
+  'klm':['KLM'],
+  'fedex':['FDX'],
+  'ryanair':['RYR'],
+  'easyjet':['EZY'],
+  'turkish airlines':['THY'],'turkish':['THY'],
+  'iberia':['IBE'],
+  'air canada':['ACA'],
+  'air china':['CCA'],
+  'china southern':['CSN'],
+  'china eastern':['CES'],
+};
+
+const DECADE_MAP = {
+  '1950s':[1950,1959],'50s':[1950,1959],
+  '1960s':[1960,1969],'60s':[1960,1969],
+  '1970s':[1970,1979],'70s':[1970,1979],
+  '1980s':[1980,1989],'80s':[1980,1989],
+  '1990s':[1990,1999],'90s':[1990,1999],
+  '2000s':[2000,2009],'2010s':[2010,2019],'2020s':[2020,2024],
+};
+
+function resolveAirport(token) {
+  // Quick search matches airports by ICAO only (e.g. KDFW, not DFW). IATA codes are
+  // intentionally not resolved here: many 3-letter IATA codes collide with airline ICAO
+  // codes (e.g. DAL = Delta / Dallas Love), so requiring ICAO keeps tokens unambiguous.
+  const up = token.toUpperCase();
+  if (ICAO_AP_SET.has(up)) return up;
+  if (CITY_MAP[token.toLowerCase()]) return CITY_MAP[token.toLowerCase()];
+  return null;
+}
+
+function parseSmartSearch() {
+  const raw = document.getElementById('smart-input').value.trim();
+  if (!raw) return;
+  const tokensEl = document.getElementById('smart-tokens');
+  const hintEl = document.getElementById('smart-hint');
+  tokensEl.innerHTML = '';
+
+  const lower = raw.toLowerCase();
+  const words = lower.split(/[\s,]+/).filter(Boolean);
+  const upper = raw.toUpperCase().split(/[\s,]+/).filter(Boolean);
+
+  // Reset quick search state - DON'T touch filter UI
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+
+  // Multi-word airline aliases
+  for (const [alias, codes] of Object.entries(AIRLINE_ALIASES)) {
+    if (lower.includes(alias)) codes.forEach(c => { if (!qs.airlines.includes(c)) { qs.airlines.push(c); qs.airlineSet.add(c); } });
+  }
+
+  // Decade patterns
+  for (const [dec, range] of Object.entries(DECADE_MAP)) {
+    if (lower.includes(dec)) { qs.yearLo=range[0]; qs.yearHi=range[1]; }
+  }
+
+  // Token-by-token
+  const addAirline = code => { if (!qs.airlines.includes(code)) { qs.airlines.push(code); qs.airlineSet.add(code); } };
+  words.forEach((w, i) => {
+    const tok = (upper[i] || w.toUpperCase());
+    // Airport resolution: ICAO (4-letter) or city name only — IATA is not recognized.
+    const apResolved = resolveAirport(tok);
+    if (apResolved) {
+      if (!qs.deps.length && !qs.arrs.length) qs.deps.push(apResolved);
+      else if (!qs.arrs.length) qs.arrs.push(apResolved);
+      else qs.arrs.push(apResolved);
+      return;
+    }
+    // 3-letter airline ICAO. With IATA airport matching removed, a 3-letter token is
+    // unambiguous: if it's a known airline code, it's the airline (e.g. DAL -> Delta).
+    if (tok.length === 3 && ICAO_AL_SET.has(tok)) {
+      addAirline(tok);
+      return;
+    }
+    // Aircraft aliases
+    const acMatch = AC_ALIASES[w];
+    if (acMatch) { qs.acFamily = acMatch[0]; return; }
+    // Duration
+    if (/^(\d+)h$/.test(w)) { qs.durHi=parseInt(w); return; }
+    if (w==='short') { qs.durHi=3; return; }
+    if (w==='long') { qs.durHi=22; return; }
+    // Exact year
+    if (/^\d{4}$/.test(w)) {
+      const y=parseInt(w);
+      if (y>=1950&&y<=2024) {
+        if (qs.yearLo===null) { qs.yearLo=y; qs.yearHi=y; }
+        else { qs.yearLo=Math.min(qs.yearLo,y); qs.yearHi=Math.max(qs.yearHi,y); }
+      }
+      return;
+    }
+    // Try 2-word city
+    if (i < words.length-1) {
+      const twoWord = words[i]+' '+words[i+1];
+      const resolved = CITY_MAP[twoWord];
+      if (resolved) {
+        if (!qs.deps.length && !qs.arrs.length) qs.deps.push(resolved);
+        else if (!qs.arrs.length) qs.arrs.push(resolved);
+        return;
+      }
+    }
+  });
+
+  // Show token pills
+  const pills = [
+    ...qs.deps.map(d => {const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}}),
+    ...qs.arrs.map(a => {const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}}),
+    ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
+    ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
+    ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
+    ...(qs.durHi!==null ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
+  ];
+
+  if (pills.length) {
+    tokensEl.innerHTML = pills.map(p=>`<span class="token ${p.cls}">${p.label}</span>`).join('');
+    hintEl.textContent = pills.length+' filter'+(pills.length!==1?'s':'')+' active';
+  } else {
+    hintEl.textContent = 'No tokens recognized — try ICAO, IATA, city name, airline, aircraft, decade';
+  }
+  queueRender();
+}
+
+document.getElementById('smart-input').addEventListener('keydown', e => {
+  if (e.key==='Enter') parseSmartSearch();
+});
+
+['dep','arr','airline-icao'].forEach(id => document.getElementById(id).addEventListener('input', queueRender));
+document.querySelectorAll('input[name=andor]').forEach(r => r.addEventListener('change', queueRender));
+
+// ── INIT ──
+setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
+setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
+window.addEventListener('load', loadData);
+</script>
+</body>
+</html>
