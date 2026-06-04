@@ -321,12 +321,15 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
               <option value="Airbus A220">Airbus A220/Bombardier CS</option>
               <option value="Airbus A300">Airbus A300</option>
               <option value="Airbus A310">Airbus A310</option>
-              <option value="Airbus A318">Airbus A318</option>
-              <option value="Airbus A319">Airbus A319</option>
-              <option value="Airbus A320">Airbus A32X CEO</option>
-              <option value="Airbus A321">Airbus A32X NEO</option>
-              <option value="Airbus A330">Airbus A330 CEO</option>
-              <option value="Airbus A330 NEO">Airbus A330 NEO</option>
+              <option value="CEO:Airbus A318">Airbus A318</option>
+              <option value="CEO:Airbus A319">Airbus A319 CEO</option>
+              <option value="NEO:Airbus A319">Airbus A319 NEO</option>
+              <option value="CEO:Airbus A320">Airbus A320 CEO</option>
+              <option value="NEO:Airbus A320">Airbus A320 NEO</option>
+              <option value="CEO:Airbus A321">Airbus A321 CEO</option>
+              <option value="NEO:Airbus A321">Airbus A321 NEO</option>
+              <option value="CEO:Airbus A330">Airbus A330 CEO</option>
+              <option value="NEO:Airbus A330">Airbus A330 NEO</option>
               <option value="Airbus A340">Airbus A340</option>
               <option value="Airbus A350">Airbus A350</option>
               <option value="Airbus A380">Airbus A380</option>
@@ -540,6 +543,9 @@ async function loadData() {
   Object.assign(AC_MAP, data.AC_MAP);
   Object.assign(CITY_MAP, data.CITY_MAP);
   ROUTES_B64_VALUE = data.ROUTES_B64;
+  // Rebuild sets that were populated at parse time from empty stubs
+  ICAO_AP_SET = new Set(Object.keys(AP_MAP));
+  ICAO_AL_SET = new Set(Object.keys(AL_MAP));
 
   loadText.textContent = 'Decompressing route database...';
   await new Promise(r => setTimeout(r, 10));
@@ -677,7 +683,20 @@ function matchesFilters(f, fi) {
   // Manual filters
   if (fi.acFamilies.length) {
     const label = f.acLabel || '';
-    if (!fi.acFamilies.some(fam => label.includes(fam))) return false;
+    // Values prefixed with "CEO:" match the base string but exclude Neo variants.
+    // Values prefixed with "NEO:" match only Neo variants of the base string.
+    const match = fi.acFamilies.some(fam => {
+      if (fam.startsWith('CEO:')) {
+        const base = fam.slice(4);
+        return label.includes(base) && !/neo/i.test(label);
+      }
+      if (fam.startsWith('NEO:')) {
+        const base = fam.slice(4);
+        return label.includes(base) && /neo/i.test(label);
+      }
+      return label.includes(fam);
+    });
+    if (!match) return false;
   }
   if (fi.excludedVariants.size && fi.excludedVariants.has(f.ac)) return false;
   if (fi.airlineSet.size && !fi.airlineSet.has(f.airline)) return false;
@@ -743,9 +762,15 @@ function acFamilyAdd(sel) {
 function acFamilyRemove(val) {
   selAcFamilies.delete(val);
   // clean up any excluded variants that belonged to this family
+  const base = val.startsWith('CEO:') || val.startsWith('NEO:') ? val.slice(4) : val;
+  const neoOnly = val.startsWith('NEO:');
+  const ceoOnly = val.startsWith('CEO:');
   for (const code of [...excludedVariants]) {
     const label = AC_MAP[code] || '';
-    if (label.includes(val)) excludedVariants.delete(code);
+    if (!label.includes(base)) continue;
+    if (ceoOnly && /neo/i.test(label)) continue;
+    if (neoOnly && !/neo/i.test(label)) continue;
+    excludedVariants.delete(code);
   }
   renderAcTags();
   renderAcVariants();
@@ -783,7 +808,11 @@ function renderAcVariants() {
   const famsArr = [...selAcFamilies];
   const variants = [];
   for (const [code, label] of Object.entries(AC_MAP)) {
-    if (famsArr.some(fam => label.includes(fam))) {
+    if (famsArr.some(fam => {
+      if (fam.startsWith('CEO:')) { const b=fam.slice(4); return label.includes(b) && !/neo/i.test(label); }
+      if (fam.startsWith('NEO:')) { const b=fam.slice(4); return label.includes(b) && /neo/i.test(label); }
+      return label.includes(fam);
+    })) {
       variants.push({ code, label });
     }
   }
@@ -1032,8 +1061,8 @@ function resetAll() {
 }
 
 // ── SMART SEARCH ──
-const ICAO_AP_SET = new Set(Object.keys(AP_MAP));
-const ICAO_AL_SET = new Set(Object.keys(AL_MAP));
+let ICAO_AP_SET = new Set(Object.keys(AP_MAP));
+let ICAO_AL_SET = new Set(Object.keys(AL_MAP));
 
 
 const AC_ALIASES = {
