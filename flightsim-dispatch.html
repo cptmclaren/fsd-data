@@ -4,19 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FlightSim Dispatch</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>✈</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('https://cptmclaren.github.io/fsd-data/fonts/Helvetica.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-}
-@font-face {
-  font-family: 'Helvetica Neue';
-  src: url('https://cptmclaren.github.io/fsd-data/fonts/Helvetica-Bold.ttf') format('truetype');
-  font-weight: 700;
-  font-style: normal;
-}
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap');
 :root {
   --bg:     #1a1a1a;
   --bg2:    #212121;
@@ -36,8 +27,8 @@
   --amber:  #c9a227;
   --amber-dim: rgba(201,162,39,0.12);
   --blue:   #7fa8d4;
-  --mono:   'Helvetica Neue', Helvetica, Arial, sans-serif;
-  --sans:   'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --mono:   'Geist Mono', 'Roboto Mono', monospace;
+  --sans:   'Geist', 'Inter', -apple-system, sans-serif;
   --r: 4px;
   --r2: 6px;
 }
@@ -243,13 +234,17 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   opacity:.65;
 }
 .ac-variant.excluded:hover { opacity:1; }
+
+/* ── VIRTUAL SCROLLER ── */
+.vscroll-sizer  { position:relative; width:100%; }
+.vscroll-window { position:absolute; top:0; left:0; right:0; }
 </style>
 </head>
 <body>
 <div id="loading-overlay" class="loading-overlay">
   <div class="loading-spinner"></div>
   <div class="loading-text" id="loading-text">Initializing FlightSim Dispatch...</div>
-  <div class="loading-sub" id="loading-sub">953,294 routes · 1950–2024</div>
+  <div class="loading-sub" id="loading-sub">604,530 routes · 1950–2024</div>
 </div>
 
 <div class="app">
@@ -270,11 +265,11 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
       <div class="smart-search-wrap">
         <div class="smart-row">
           <input class="smart-input" id="smart-input" type="text"
-            placeholder='Search: "dfw mia" · "pan am 747 1970s" · "dallas london"'>
+            placeholder='Search: "KDFW KMIA" · "pan am 747 1970s" · "dallas london"'>
           <button class="smart-btn" onclick="parseSmartSearch()">GO</button>
         </div>
         <div class="smart-tokens" id="smart-tokens"></div>
-        <div class="smart-hint" id="smart-hint">IATA · ICAO · city · airline · aircraft · decade</div>
+        <div class="smart-hint" id="smart-hint">ICAO · city · airline · aircraft · decade</div>
       </div>
 
       <div class="filters">
@@ -352,8 +347,8 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
               <option value="Boeing 737-300">Boeing 737 Classic (-300 to -500)</option>
               <option value="Boeing 737-600">Boeing 737 NG (600-900)</option>
               <option value="Boeing 737 MAX">Boeing 737 MAX</option>
-              <option value="Boeing 747-100">Boeing 747 Classic</option>
-              <option value="Boeing 747-400">Boeing 747 NG</option>
+              <option value="747C:Boeing 747">Boeing 747 Classic (-100/-200/-300/SP)</option>
+              <option value="747N:Boeing 747">Boeing 747 NG (-400/-8)</option>
               <option value="Boeing 757">Boeing 757</option>
               <option value="Boeing 767">Boeing 767</option>
               <option value="Boeing 777">Boeing 777</option>
@@ -437,7 +432,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <div class="fg">
           <div class="departs-row">
             <input type="checkbox" id="departs-enable" onchange="queueRender()">
-            <span>Departs in the next</span>
+            <span>Departs in next (Zulu)</span>
             <input type="number" id="departs-lo" value="45" min="0" max="1439" onchange="queueRender()">
             <span class="departs-sep">-</span>
             <input type="number" id="departs-hi" value="60" min="0" max="1439" onchange="queueRender()">
@@ -704,6 +699,14 @@ function matchesFilters(f, fi) {
         const base = fam.slice(4);
         return label.includes(base) && /neo/i.test(label);
       }
+      if (fam.startsWith('747C:')) {
+        // Classic: -100, -200, -300, SP — exclude -400 and -8
+        return label.includes('Boeing 747') && !/747-[48]/.test(label) && !/747-8/.test(label);
+      }
+      if (fam.startsWith('747N:')) {
+        // NG: -400 and -8 variants
+        return label.includes('Boeing 747') && /747-[48]/.test(label);
+      }
       return label.includes(fam);
     });
     if (!match) return false;
@@ -772,7 +775,8 @@ function acFamilyAdd(sel) {
 function acFamilyRemove(val) {
   selAcFamilies.delete(val);
   // clean up any excluded variants that belonged to this family
-  const base = val.startsWith('CEO:') || val.startsWith('NEO:') ? val.slice(4) : val;
+  const is747C = val.startsWith('747C:'), is747N = val.startsWith('747N:');
+  const base = (val.startsWith('CEO:') || val.startsWith('NEO:') || is747C || is747N) ? val.slice(val.indexOf(':')+1) : val;
   const neoOnly = val.startsWith('NEO:');
   const ceoOnly = val.startsWith('CEO:');
   for (const code of [...excludedVariants]) {
@@ -821,6 +825,8 @@ function renderAcVariants() {
     if (famsArr.some(fam => {
       if (fam.startsWith('CEO:')) { const b=fam.slice(4); return label.includes(b) && !/neo/i.test(label); }
       if (fam.startsWith('NEO:')) { const b=fam.slice(4); return label.includes(b) && /neo/i.test(label); }
+      if (fam.startsWith('747C:')) { return label.includes('Boeing 747') && !/747-[48]/.test(label); }
+      if (fam.startsWith('747N:')) { return label.includes('Boeing 747') && /747-[48]/.test(label); }
       return label.includes(fam);
     })) {
       variants.push({ code, label });
@@ -916,8 +922,8 @@ function renderTable() {
   // Apply remaining filters (year, duration, acFam, qs, departs)
   const filtered = candidates.filter(f => matchesFilters(f, fi));
 
-  const shown = getSorted(filtered).slice(0, 2500);
-  const more = filtered.length - shown.length;
+  const shown = getSorted(filtered);
+  const more = 0;
 
   document.getElementById('filter-note').innerHTML =
     `<span>${filtered.length.toLocaleString()}</span> shown · <span>${(DB.length - filtered.length).toLocaleString()}</span> filtered`;
@@ -940,33 +946,74 @@ function renderTable() {
     return;
   }
 
-  wrap.innerHTML = shown.map(f => {
-    const apDep = AP_MAP[f.dep];
-    const apArr = AP_MAP[f.arr];
-    const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,14) : f.dep;
-    const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,14) : f.arr;
-    const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
-                     selRoute.airline===f.airline && selRoute.ac===f.ac;
-    const seasonBadge = f.season==='S' ? '<span class="badge badge-s">SUMMER</span>' : f.season==='W' ? '<span class="badge badge-w">WINTER</span>' : '';
-    const fnNums = f.fns ? f.fns.split(',').map(n => f.airline+n).join(', ') : '';
-    const depTimeStr = f.depTime ? f.depTime.slice(0,2)+':'+f.depTime.slice(2) : '';
-    const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
-    return `<div class="tr${isActive?' active':''}">
-      <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
-      <div class="td td-mono">${f.dep}<div class="td-sub">${depCity}</div></div>
-      <div class="td td-mono">${f.arr}<div class="td-sub">${arrCity}</div></div>
-      <div class="td">${f.acLabel.substring(0,22)}<div class="td-sub td-mono">${f.ac}</div></div>
-      <div class="td td-mono">${depTimeStr ? depTimeStr+'<span style="opacity:.5;"> → </span>'+arrTimeStr : ''}</div>
-      <div class="td td-mono">${formatDur(f.dur)}</div>
-      <div class="td td-mono">${f.year} ${seasonBadge}</div>
-    </div>`;
-  }).join('') + (more > 0
-    ? `<div class="no-results" style="padding:14px;font-size:11px;font-family:var(--mono);">+${more.toLocaleString()} more — refine filters to narrow results</div>`
-    : '');
+  mountVScroll(wrap, filtered, more);
+}
 
-  wrap.querySelectorAll('.tr').forEach((el, i) => {
-    el.onclick = () => selectRoute(shown[i]);
-  });
+
+// ── VIRTUAL SCROLLER ──────────────────────────────────────────────────────
+const ROW_H = 44;   // px — must match .tr height
+let vsRows = [];    // current sorted filtered rows
+let vsScrollListener = null;
+
+function rowHTML(f) {
+  const apDep = AP_MAP[f.dep];
+  const apArr = AP_MAP[f.arr];
+  const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,14) : f.dep;
+  const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,14) : f.arr;
+  const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
+                   selRoute.airline===f.airline && selRoute.ac===f.ac;
+  const seasonBadge = f.season==='S' ? '<span class="badge badge-s">SUMMER</span>'
+                    : f.season==='W' ? '<span class="badge badge-w">WINTER</span>' : '';
+  const fnNums = f.fns ? f.fns.split(',').map(n => f.airline+n).join(', ') : '';
+  const depTimeStr = f.depTime ? f.depTime.slice(0,2)+':'+f.depTime.slice(2) : '';
+  const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
+  return `<div class="tr${isActive?' active':''}" style="position:absolute;left:0;right:0;height:${ROW_H}px;">
+    <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
+    <div class="td td-mono">${f.dep}<div class="td-sub">${depCity}</div></div>
+    <div class="td td-mono">${f.arr}<div class="td-sub">${arrCity}</div></div>
+    <div class="td">${f.acLabel.substring(0,22)}<div class="td-sub td-mono">${f.ac}</div></div>
+    <div class="td td-mono">${depTimeStr ? depTimeStr+'<span style="opacity:.5;"> → </span>'+arrTimeStr : ''}</div>
+    <div class="td td-mono">${formatDur(f.dur)}</div>
+    <div class="td td-mono">${f.year} ${seasonBadge}</div>
+  </div>`;
+}
+
+function mountVScroll(wrap, rows, more) {
+  vsRows = rows;
+  // Remove old scroll listener
+  if (vsScrollListener) { wrap.removeEventListener('scroll', vsScrollListener); vsScrollListener = null; }
+
+  const totalH = rows.length * ROW_H;
+  wrap.innerHTML = `<div class="vscroll-sizer" style="height:${totalH}px;"><div class="vscroll-window" id="vs-window"></div></div>`;
+
+  const sizer = wrap.querySelector('.vscroll-sizer');
+  const win   = wrap.querySelector('#vs-window');
+  const OVERSCAN = 5;
+
+  function paint() {
+    const scrollTop = wrap.scrollTop;
+    const viewH = wrap.clientHeight;
+    const firstIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+    const lastIdx  = Math.min(rows.length - 1, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
+    let html = '';
+    for (let i = firstIdx; i <= lastIdx; i++) {
+      const top = i * ROW_H;
+      html += rowHTML(rows[i]).replace('style="position:absolute', `style="position:absolute;top:${top}px`);
+    }
+    win.innerHTML = html;
+    win.querySelectorAll('.tr').forEach((el, j) => {
+      el.onclick = () => selectRoute(rows[firstIdx + j]);
+    });
+  }
+
+  vsScrollListener = paint;
+  wrap.addEventListener('scroll', vsScrollListener, { passive: true });
+  paint();
+}
+
+function vsRepaint() {
+  const wrap = document.getElementById('table-wrap');
+  if (vsRows.length && wrap.querySelector('.vscroll-sizer')) mountVScroll(wrap, vsRows, 0);
 }
 
 
@@ -1061,8 +1108,9 @@ function resetAll() {
   document.querySelectorAll('input[name=andor]')[0].checked=true;
   document.getElementById('smart-input').value='';
   document.getElementById('smart-tokens').innerHTML='';
-  document.getElementById('smart-hint').textContent='IATA · ICAO · city · airline · aircraft · decade';
+  document.getElementById('smart-hint').textContent='ICAO · city · airline · aircraft · decade';
   qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+  history.replaceState(null,'','#');
   setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
   setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
   selRoute=null; selFlightIdx=null;
@@ -1228,13 +1276,35 @@ function parseSmartSearch() {
     tokensEl.innerHTML = pills.map(p=>`<span class="token ${p.cls}">${p.label}</span>`).join('');
     hintEl.textContent = pills.length+' filter'+(pills.length!==1?'s':'')+' active';
   } else {
-    hintEl.textContent = 'No tokens recognized — try ICAO, IATA, city name, airline, aircraft, decade';
+    hintEl.textContent = 'No tokens recognized — try ICAO (e.g. KDFW), city, airline code, aircraft, decade';
   }
+  encodeState();
   queueRender();
 }
 
 document.getElementById('smart-input').addEventListener('keydown', e => {
   if (e.key==='Enter') parseSmartSearch();
+});
+
+// Arrow key navigation through results
+document.addEventListener('keydown', e => {
+  if (!vsRows.length) return;
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  // Only fire if focus is not in an input/select
+  if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  e.preventDefault();
+  const cur = selRoute ? vsRows.findIndex(r =>
+    r.dep===selRoute.dep && r.arr===selRoute.arr &&
+    r.airline===selRoute.airline && r.ac===selRoute.ac) : -1;
+  const next = e.key==='ArrowDown'
+    ? Math.min(vsRows.length-1, cur+1)
+    : Math.max(0, cur === -1 ? 0 : cur-1);
+  selectRoute(vsRows[next]);
+  // Scroll selected row into view
+  const wrap = document.getElementById('table-wrap');
+  const top = next * ROW_H;
+  if (top < wrap.scrollTop) wrap.scrollTop = top;
+  else if (top + ROW_H > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = top + ROW_H - wrap.clientHeight;
 });
 
 ['dep','arr','airline-icao'].forEach(id => document.getElementById(id).addEventListener('input', queueRender));
@@ -1243,7 +1313,50 @@ document.querySelectorAll('input[name=andor]').forEach(r => r.addEventListener('
 // ── INIT ──
 setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
 setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
-window.addEventListener('load', loadData);
+
+// ── URL HASH STATE ────────────────────────────────────────────────────────
+function encodeState() {
+  const parts = [];
+  if (qs.deps.length)    parts.push('d=' + qs.deps.join(','));
+  if (qs.arrs.length)    parts.push('a=' + qs.arrs.join(','));
+  if (qs.airlines.length) parts.push('al=' + qs.airlines.join(','));
+  if (qs.acFamily)       parts.push('ac=' + encodeURIComponent(qs.acFamily));
+  if (qs.yearLo !== null) parts.push('y=' + qs.yearLo + '-' + qs.yearHi);
+  if (qs.durHi !== null)  parts.push('dur=' + qs.durHi);
+  const hash = parts.length ? '#' + parts.join('&') : '#';
+  history.replaceState(null, '', hash);
+}
+
+function decodeState() {
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+  const params = {};
+  hash.split('&').forEach(p => { const [k,v] = p.split('='); if(k&&v) params[k]=v; });
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+  if (params.d)  { qs.deps    = params.d.split(',').filter(Boolean); }
+  if (params.a)  { qs.arrs    = params.a.split(',').filter(Boolean); }
+  if (params.al) { qs.airlines = params.al.split(',').filter(Boolean); qs.airlineSet = new Set(qs.airlines); }
+  if (params.ac) { qs.acFamily = decodeURIComponent(params.ac); }
+  if (params.y)  { const [lo,hi]=params.y.split('-'); qs.yearLo=parseInt(lo); qs.yearHi=parseInt(hi); }
+  if (params.dur){ qs.durHi = parseInt(params.dur); }
+
+  // Populate the search box display
+  const pills = [
+    ...qs.deps.map(d  => { const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}; }),
+    ...qs.arrs.map(a  => { const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}; }),
+    ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
+    ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
+    ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
+    ...(qs.durHi!==null  ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
+  ];
+  if (pills.length) {
+    document.getElementById('smart-tokens').innerHTML = pills.map(p=>`<span class="token ${p.cls}">${p.label}</span>`).join('');
+    document.getElementById('smart-hint').textContent = pills.length+' filter'+(pills.length!==1?'s':'')+' active (from URL)';
+  }
+  queueRender();
+}
+
+window.addEventListener('load', () => { loadData().then(() => decodeState()); });
 </script>
 </body>
 </html>
