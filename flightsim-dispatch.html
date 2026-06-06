@@ -476,8 +476,8 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <div class="th" id="th-arr"     onclick="setSort('arr')">To</div>
         <div class="th" id="th-ac"      onclick="setSort('ac')">Aircraft</div>
         <div class="th"                 onclick="setSort('dep')">Dep / Arr</div>
-        <div class="th" id="th-dur"     onclick="setSort('dur-asc')">Dur.</div>
-        <div class="th" id="th-year"    onclick="setSort('year-asc')">Year</div>
+        <div class="th" id="th-dur"     onclick="setSort('dur')">Dur.</div>
+        <div class="th" id="th-year"    onclick="setSort('year')">Year</div>
       </div>
 
       <div class="table-wrap" id="table-wrap">
@@ -740,22 +740,15 @@ function matchesFilters(f, fi) {
 }
 
 function getSorted(arr) {
-  const LIMIT = 2500;
+  // Normalise: dur-asc/dur-desc -> col='dur', year-asc/year-desc -> col='year'
+  const col = sortCol.replace(/-(asc|desc)$/, '');
   const cmp = (() => {
-    if (sortCol==='dur-asc'||sortCol==='dur-desc') return (a,b)=>a.dur-b.dur;
-    if (sortCol==='year-asc'||sortCol==='year-desc') return (a,b)=>a.year-b.year;
-    return (a,b)=>{const va=(a[sortCol]||'').toString(),vb=(b[sortCol]||'').toString();return va<vb?-1:va>vb?1:0;};
+    if (col === 'dur')  return (a,b) => a.dur  - b.dur;
+    if (col === 'year') return (a,b) => a.year - b.year;
+    return (a,b) => { const va=(a[col]||'').toString(), vb=(b[col]||'').toString(); return va<vb?-1:va>vb?1:0; };
   })();
-  const dir = (sortCol.endsWith('desc')||sortDir==='desc') ? -1 : 1;
-  if (arr.length <= LIMIT) return arr.slice().sort((a,b)=>dir*cmp(a,b));
-  // For large result sets, do a quick tournament to find top LIMIT
-  // rather than sorting 400k rows: sample evenly then sort the sample
-  const SAMPLE = Math.min(arr.length, LIMIT * 4);
-  const step = Math.floor(arr.length / SAMPLE);
-  const sampled = [];
-  for (let i = 0; i < arr.length; i += step) sampled.push(arr[i]);
-  sampled.sort((a,b)=>dir*cmp(a,b));
-  return sampled.slice(0, LIMIT);
+  const dir = sortDir === 'desc' ? -1 : 1;
+  return arr.slice().sort((a,b) => dir * cmp(a,b));
 }
 
 
@@ -936,9 +929,10 @@ function renderTable() {
     `<span>${_als.size}</span> airlines · ` +
     `<span>${_pairs.size.toLocaleString()}</span> city pairs`;
 
-  ['airline','dep','arr','ac'].forEach(c => {
+  ['airline','dep','arr','ac','dur','year'].forEach(c => {
     const el = document.getElementById('th-'+c);
-    if (el) el.className = 'th' + (sortCol===c ? ' '+(sortDir==='asc'?'asc':'desc') : '');
+    const activeCol = sortCol.replace(/-(asc|desc)$/, '');
+    if (el) el.className = 'th' + (activeCol===c ? ' '+(sortDir==='asc'?'asc':'desc') : '');
   });
 
   if (!shown.length) {
