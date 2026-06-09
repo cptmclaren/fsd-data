@@ -8,6 +8,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FlightSim Dispatch</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap');
@@ -63,7 +64,9 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .smart-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--sans); font-size:12px; padding:5px 9px; outline:none; transition:border-color .15s; }
 .smart-input:focus { border-color:var(--accent); }
 .smart-input::placeholder { color:var(--text3); font-size:11px; }
-.smart-btn { background:var(--accent); border:none; border-radius:var(--r); color:#fff; font-family:var(--mono); font-size:11px; font-weight:600; padding:0 12px; cursor:pointer; transition:background .15s; letter-spacing:.04em; }
+.smart-btn { background:var(--accent); border:none; border-radius:var(--r); color:#fff; font-family:var(--mono); font-size:11px; font-weight:600; padding:0 12px; cursor:pointer; transition:background .18s cubic-bezier(.4,0,.2,1), transform .12s cubic-bezier(.4,0,.2,1), box-shadow .18s; letter-spacing:.04em; }
+.smart-btn:hover { box-shadow:0 0 0 3px rgba(217,119,87,0.22); }
+.smart-btn:active { transform:scale(0.96); box-shadow:none; }
 .smart-btn:hover { background:var(--accent2); }
 .smart-tokens { display:flex; flex-wrap:wrap; gap:3px; margin-top:5px; min-height:14px; }
 .token { font-size:10px; font-family:var(--mono); padding:1px 6px; border-radius:2px; border:1px solid transparent; }
@@ -123,10 +126,12 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 
 /* ── BUTTONS ── */
 .btn-row { display:flex; gap:6px; margin-top:6px; }
-.btn { flex:1; padding:5px 0; border-radius:var(--r); font-family:var(--sans); font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border2); background:var(--bg3); color:var(--text2); transition:all .15s; }
+.btn { flex:1; padding:5px 0; border-radius:var(--r); font-family:var(--sans); font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border2); background:var(--bg3); color:var(--text2); transition:background .18s cubic-bezier(.4,0,.2,1), color .18s, border-color .18s, transform .12s cubic-bezier(.4,0,.2,1), box-shadow .18s; }
 .btn:hover { background:var(--bg4); color:var(--text); }
+.btn:active { transform:scale(0.97); }
 .btn-primary { background:var(--accent-dim); color:var(--accent); border-color:rgba(217,119,87,.3); }
-.btn-primary:hover { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:var(--accent); color:#fff; box-shadow:0 0 0 3px rgba(217,119,87,0.18); }
+.btn-primary:active { transform:scale(0.97); box-shadow:none; }
 
 /* ── FLIGHT LIST (left bottom) ── */
 .results-section { flex:1; display:flex; flex-direction:column; overflow:hidden; border-top:1px solid var(--border2); min-height:80px; }
@@ -187,6 +192,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 .badge { display:inline-block; font-size:9px; padding:1px 6px; border-radius:2px; font-family:var(--mono); font-weight:600; letter-spacing:.04em; border:1px solid transparent; }
 .badge-s { background:rgba(201,162,39,.15); color:#e0b84a; border-color:rgba(201,162,39,.3); }
 .badge-w { background:rgba(127,168,212,.12); color:#8bbfe0; border-color:rgba(127,168,212,.28); }
+.badge-cargo { background:rgba(201,162,39,.12); color:#c9a227; border-color:rgba(201,162,39,.28); }
 
 /* ── BOTTOMBAR ── */
 .bottombar { display:flex; gap:8px; padding:7px 12px; border-top:1px solid var(--border2); background:var(--bg2); flex-shrink:0; align-items:center; }
@@ -240,20 +246,55 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 
 /* ── SIMBRIEF BUTTON ── */
 .simbrief-btn {
-  display:block; width:100%; margin-top:8px;
-  padding:6px 12px; border-radius:var(--r);
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; margin-top:8px;
+  padding:7px 12px; border-radius:var(--r);
   background:rgba(95,173,126,0.1);
   border:1px solid rgba(95,173,126,0.45);
   color:var(--green); font-family:var(--mono);
   font-size:11px; font-weight:600; letter-spacing:.06em;
   cursor:pointer; text-align:center;
-  transition:background .15s, border-color .15s, color .15s;
+  transition:background .2s cubic-bezier(.4,0,.2,1), border-color .2s, color .2s, transform .12s cubic-bezier(.4,0,.2,1), box-shadow .2s;
   text-transform:uppercase;
 }
 .simbrief-btn:hover {
   background:rgba(95,173,126,0.22);
   border-color:rgba(95,173,126,0.7);
   color:#7fcfa0;
+  box-shadow:0 0 0 3px rgba(95,173,126,0.16);
+}
+.simbrief-btn:active {
+  transform:scale(0.97);
+  box-shadow:none;
+}
+.simbrief-btn .sb-icon {
+  font-size:13px; transition:transform .2s cubic-bezier(.4,0,.2,1);
+}
+.simbrief-btn:hover .sb-icon {
+  transform:translateX(2px) translateY(-2px);
+}
+
+
+/* ── SORT SEGMENTED CONTROL ── */
+.sort-seg-wrap { display:flex; align-items:center; gap:8px; }
+.sort-seg { display:flex; background:var(--bg3); border:1px solid var(--border2); border-radius:22px; padding:3px; gap:2px; position:relative; }
+.sort-seg-btn {
+  position:relative; z-index:1;
+  font-family:var(--mono); font-size:10.7px; font-weight:500;
+  padding:4px 11px; border-radius:17px; cursor:pointer;
+  border:none; background:transparent;
+  color:var(--text3); letter-spacing:.04em;
+  transition:color .15s cubic-bezier(.4,0,.2,1);
+  white-space:nowrap;
+}
+.sort-seg-btn.active { color:var(--text); }
+.seg-arrow { display:inline-block; width:12px; text-align:left; font-size:9px; opacity:.7; }
+.sort-seg-indicator {
+  position:absolute; top:3px; bottom:3px;
+  background:var(--bg4); border-radius:15px;
+  border:1px solid var(--border2);
+  transition:left .16s cubic-bezier(.4,0,.2,1), width .16s cubic-bezier(.4,0,.2,1);
+  pointer-events:none; z-index:0;
 }
 
 /* ── VIRTUAL SCROLLER ── */
@@ -478,18 +519,29 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
     <div class="right">
       <div class="right-topbar">
         <span class="sort-label">Sort:</span>
-        <select id="sort-sel" style="width:180px;" onchange="setSort(this.value)">
-          <option value="airline">Airline</option>
-          <option value="dep">Departure</option>
-          <option value="arr">Arrival</option>
-          <option value="ac">Aircraft</option>
-          <option value="dur-asc">Duration (short first)</option>
-          <option value="dur-desc">Duration (long first)</option>
-          <option value="year-asc">Year (oldest first)</option>
-          <option value="year-desc">Year (newest first)</option>
-        </select>
+        <div class="sort-seg-wrap">
+          <div class="sort-seg" id="sort-seg">
+            <div class="sort-seg-indicator" id="sort-indicator"></div>
+            <button class="sort-seg-btn active" data-sort="airline" onclick="setSortSeg(this)">Airline<span class="seg-arrow"> ↑</span></button>
+            <button class="sort-seg-btn" data-sort="dep" onclick="setSortSeg(this)">Dep<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="arr" onclick="setSortSeg(this)">Arr<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="ac" onclick="setSortSeg(this)">Aircraft<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="dur" onclick="setSortSeg(this)">Duration<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="year" onclick="setSortSeg(this)">Year<span class="seg-arrow"></span></button>
+          </div>
+        </div>
         <span class="filter-note" id="filter-note"></span>
       </div>
+      <select id="sort-sel" style="display:none;" onchange="setSort(this.value)">
+        <option value="airline">Airline</option>
+        <option value="dep">Departure</option>
+        <option value="arr">Arrival</option>
+        <option value="ac">Aircraft</option>
+        <option value="dur-asc">Duration (short first)</option>
+        <option value="dur-desc">Duration (long first)</option>
+        <option value="year-asc">Year (oldest first)</option>
+        <option value="year-desc">Year (newest first)</option>
+      </select>
 
       <div class="table-head">
         <div class="th" id="th-airline" onclick="setSort('airline')">Airline</div>
@@ -532,6 +584,7 @@ let excludedVariants = new Set(); // ac codes user has clicked off
 let IDX_DEP = new Map();   // dep ICAO -> [i, ...]
 let IDX_ARR = new Map();   // arr ICAO -> [i, ...]
 let IDX_AL  = new Map();   // airline  -> [i, ...]
+let IDX_FN  = new Map();   // airline+flightnum -> [i, ...]
 let sortCol = "airline", sortDir = "asc";
 let selRoute = null, selFlightIdx = null;
 let renderTimer = null;
@@ -635,6 +688,7 @@ async function loadData() {
     IDX_ARR.get(r.arr).push(i);
     if (!IDX_AL.has(r.airline)) IDX_AL.set(r.airline, []);
     IDX_AL.get(r.airline).push(i);
+    if (r.fns) { r.fns.split(',').forEach(fn => { const key=(r.airline+fn.trim()).toUpperCase(); if (!IDX_FN.has(key)) IDX_FN.set(key,[]); IDX_FN.get(key).push(i); }); }
   }
   loadText.textContent = `Loaded ${DB.length.toLocaleString()} routes`;
   await new Promise(r => setTimeout(r, 200));
@@ -748,6 +802,7 @@ function matchesFilters(f, fi) {
   if (qs.airlineSet && qs.airlineSet.size) { if (!qs.airlineSet.has(f.airline)) return false; }
   if (qs.acFamily) { if (!(f.acLabel||'').includes(qs.acFamily)) return false; }
   if (qs.yearLo !== null) { if (f.year < qs.yearLo || f.year > (qs.yearHi||qs.yearLo)) return false; }
+  if (qs.flightNum !== null) { const key=(f.airline+qs.flightNum).toUpperCase(); if (!f.fns || !f.fns.split(',').some(n=>(f.airline+n.trim()).toUpperCase()===key)) return false; }
   if (qs.durHi !== null) { if (f.dur > qs.durHi) return false; }
   // Departs in next X minutes (uses current UTC minutes-of-day)
   if (fi.departsEnable && f.depTime) {
@@ -986,7 +1041,7 @@ function rowHTML(f) {
     <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
     <div class="td td-mono">${f.dep}<div class="td-sub">${depCity}</div></div>
     <div class="td td-mono">${f.arr}<div class="td-sub">${arrCity}</div></div>
-    <div class="td">${f.acLabel.substring(0,22)}<div class="td-sub td-mono">${f.ac}</div></div>
+    <div class="td">${f.acLabel.substring(0,22)} ${cargoBadge}<div class="td-sub td-mono">${f.ac}</div></div>
     <div class="td td-mono">${depTimeStr ? depTimeStr+'<span style="opacity:.5;"> → </span>'+arrTimeStr : ''}</div>
     <div class="td td-mono">${formatDur(f.dur)}</div>
     <div class="td td-mono">${f.year} ${seasonBadge}</div>
@@ -1097,7 +1152,6 @@ function openSimbrief(f) {
   params.set('type',    sb);
   params.set('airline', f.airline);
   if (fltnum)  params.set('fltnum', fltnum);
-  if (deph)  { params.set('deph', deph); params.set('depm', depm); }
   if (steh)  { params.set('steh', String(steh)); params.set('stem', String(stem)); }
   params.set('find_sidstar', '1');
   params.set('navlog',       '1');
@@ -1138,15 +1192,71 @@ function showDetail(f) {
       <div class="dfield"><div class="dfield-label">Sched dep / arr</div><div class="dfield-val td-mono">${(f.depTime && f.arrTime) ? f.depTime.slice(0,2)+':'+f.depTime.slice(2)+' → '+f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '—'}</div></div>
       ${f.fns ? `<div class="dfield" style="grid-column:1/-1"><div class="dfield-label">Flight number(s)</div><div class="dfield-val td-mono" style="white-space:normal;word-break:break-word;font-size:11px;">${f.fns.split(',').map(n=>f.airline+n).join('  ·  ')}</div></div>` : ''}
     </div>
-    <button class="simbrief-btn" onclick="openSimbrief(selRoute)">↗ Send to Simbrief</button>
+    <button class="simbrief-btn" onclick="openSimbrief(selRoute)"><i class="sb-icon ti ti-external-link" aria-hidden="true"></i> Send to Simbrief</button>
   `;
 }
 
 // ── SORT ──
+function positionSortIndicator() {
+  const seg = document.getElementById('sort-seg');
+  const ind = document.getElementById('sort-indicator');
+  const active = seg ? seg.querySelector('.sort-seg-btn.active') : null;
+  if (!active || !ind) return;
+  ind.style.left  = active.offsetLeft + 'px';
+  ind.style.width = active.offsetWidth + 'px';
+}
+
+function setSortSeg(btn) {
+  const seg = document.getElementById('sort-seg');
+  const sortKey = btn.dataset.sort;
+  // Toggle direction if same column
+  const wasActive = btn.classList.contains('active');
+  seg.querySelectorAll('.sort-seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  positionSortIndicator();
+  if (wasActive) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortCol = sortKey;
+    sortDir = (sortKey === 'dur' || sortKey === 'year') ? 'asc' : 'asc';
+  }
+  sortCol = sortKey;
+  // Update direction arrow — only touch the span, not the button text
+  seg.querySelectorAll('.sort-seg-btn').forEach(b => {
+    const sp = b.querySelector('.seg-arrow');
+    if (sp) sp.textContent = '';
+  });
+  const activeSpan = btn.querySelector('.seg-arrow');
+  if (activeSpan) activeSpan.textContent = sortDir === 'asc' ? ' ↑' : ' ↓';
+  // Keep hidden select in sync
+  const selVal = (sortKey === 'dur' || sortKey === 'year') ? sortKey + '-' + sortDir : sortKey;
+  const sel = document.getElementById('sort-sel');
+  if (sel) sel.value = selVal;
+  // Update column header highlights
+  ['airline','dep','arr','ac','dur','year'].forEach(c => {
+    const el = document.getElementById('th-'+c);
+    if (el) el.className = 'th' + (c === sortKey ? ' '+(sortDir==='asc'?'asc':'desc') : '');
+  });
+  queueRender();
+}
+
 function setSort(v) {
   if (sortCol===v) { sortDir = sortDir==='asc'?'desc':'asc'; }
   else { sortCol=v; sortDir=v.endsWith('desc')?'desc':'asc'; }
-  document.getElementById('sort-sel').value = v;
+  // Sync dropdown: for dur/year use the asc/desc variant option;
+  // for simple cols update the option label to show direction arrow
+  const sel = document.getElementById('sort-sel');
+  const col = v.replace(/-(asc|desc)$/, '');
+  if (col === 'dur' || col === 'year') {
+    sel.value = col + '-' + sortDir;
+  } else {
+    sel.value = col;
+    // Update option text to show arrow
+    Array.from(sel.options).forEach(o => {
+      o.text = o.text.replace(/ [↑↓]$/, '');
+      if (o.value === col) o.text += sortDir === 'asc' ? ' ↑' : ' ↓';
+    });
+  }
   queueRender();
 }
 
@@ -1198,7 +1308,7 @@ function resetAll() {
   document.getElementById('smart-input').value='';
   document.getElementById('smart-tokens').innerHTML='';
   document.getElementById('smart-hint').textContent='ICAO · city · airline · aircraft · decade';
-  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
   history.replaceState(null,'','#');
   setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
   setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
@@ -1293,7 +1403,7 @@ function parseSmartSearch() {
   const upper = raw.toUpperCase().split(/[\s,]+/).filter(Boolean);
 
   // Reset quick search state - DON'T touch filter UI
-  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
 
   // Multi-word airline aliases
   for (const [alias, codes] of Object.entries(AIRLINE_ALIASES)) {
@@ -1339,6 +1449,21 @@ function parseSmartSearch() {
       }
       return;
     }
+    // Flight number: e.g. AA100, AAL100, AAL2416, 2416 (bare number used with airline already set)
+    if (/^[A-Z]{2,3}\d{1,5}$/i.test(w)) {
+      // e.g. AAL2416 or AA100
+      const m = w.match(/^([A-Z]{2,3})(\d{1,5})$/i);
+      if (m) {
+        const possibleAl = m[1].toUpperCase();
+        const num = m[2];
+        if (ICAO_AL_SET.has(possibleAl) || possibleAl.length===2) {
+          if (ICAO_AL_SET.has(possibleAl)) addAirline(possibleAl);
+          qs.flightNum = num;
+          return;
+        }
+      }
+    }
+    if (/^\d{1,5}$/.test(w) && qs.airlines.length) { qs.flightNum = w; return; }
     // Try 2-word city
     if (i < words.length-1) {
       const twoWord = words[i]+' '+words[i+1];
@@ -1359,6 +1484,7 @@ function parseSmartSearch() {
     ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
     ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
     ...(qs.durHi!==null ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
+    ...(qs.flightNum!==null ? [{label:`FLT: ${qs.airlines.length?qs.airlines[0]:''}${qs.flightNum}`,cls:'token-airline'}] : []),
   ];
 
   if (pills.length) {
@@ -1421,7 +1547,7 @@ function decodeState() {
   if (!hash) return;
   const params = {};
   hash.split('&').forEach(p => { const [k,v] = p.split('='); if(k&&v) params[k]=v; });
-  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null };
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
   if (params.d)  { qs.deps    = params.d.split(',').filter(Boolean); }
   if (params.a)  { qs.arrs    = params.a.split(',').filter(Boolean); }
   if (params.al) { qs.airlines = params.al.split(',').filter(Boolean); qs.airlineSet = new Set(qs.airlines); }
@@ -1445,7 +1571,8 @@ function decodeState() {
   queueRender();
 }
 
-window.addEventListener('load', () => { loadData().then(() => decodeState()); });
+window.addEventListener('load', () => { loadData().then(() => { decodeState(); setTimeout(positionSortIndicator, 50); }); });
+window.addEventListener('resize', positionSortIndicator);
 </script>
 </body>
 </html>
