@@ -238,6 +238,24 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 }
 .ac-variant.excluded:hover { opacity:1; }
 
+/* ── SIMBRIEF BUTTON ── */
+.simbrief-btn {
+  display:block; width:100%; margin-top:8px;
+  padding:6px 12px; border-radius:var(--r);
+  background:rgba(95,173,126,0.1);
+  border:1px solid rgba(95,173,126,0.45);
+  color:var(--green); font-family:var(--mono);
+  font-size:11px; font-weight:600; letter-spacing:.06em;
+  cursor:pointer; text-align:center;
+  transition:background .15s, border-color .15s, color .15s;
+  text-transform:uppercase;
+}
+.simbrief-btn:hover {
+  background:rgba(95,173,126,0.22);
+  border-color:rgba(95,173,126,0.7);
+  color:#7fcfa0;
+}
+
 /* ── VIRTUAL SCROLLER ── */
 .vscroll-sizer  { position:relative; width:100%; }
 .vscroll-window { position:absolute; top:0; left:0; right:0; }
@@ -1014,6 +1032,79 @@ function vsRepaint() {
 }
 
 
+// ── SIMBRIEF INTEGRATION ─────────────────────────────────────────────────
+const AC_TO_SB = {
+  'ATR':'AT72','CRJ':'CRJ9','CRA':'CRJ9','DHT':'DH8D','DH1':'DH8A','DH2':'DH8B',
+  'DH8C':'DH8C','DH8D':'DH8D','SB20':'SB20','SF34':'SF34','AR1':'RJ1H','AR8':'RJ85',
+  'RJ100':'RJ1H','RJ85':'RJ85','RJ70':'RJ70','F100':'F100','F70':'F70','F50':'F50',
+  'F28':'F28','AB6':'A306','AB4':'A30B','B461':'B461','B143':'B463',
+  'BAE1':'B461','BAE2':'B462','BAE3':'B463','A40':'A346','A58':'A359','A81':'A318',
+  'MD80':'MD82','MD90':'MD90','DC9':'DC93','B77W':'B77W','B77L':'B772',
+  'B764':'B764','B763':'B763','B762':'B762',
+  '747':'B744','757':'B752','767':'B763','777':'B773','787':'B789',
+  '73Q':'B732','74M':'B741','T134':'T134','T154':'T154','T20':'T204',
+  'IL62':'IL62','IL76MD':'IL76','IL76TD':'IL76','IL96':'IL96','IL18D':'IL18','IL18V':'IL18',
+  'AN24':'AN24','AN26':'AN26','YK42':'YK42','YK40':'YK40',
+  'BE1':'B190','BH2':'B190','BEH':'B190','SWM':'SW4','CNC':'C208','CNA':'C172',
+  'PAG':'PC12','PL2':'PC12','SSJ':'SU95','SU9':'SU95','FRJ':'D328',
+  'L4T':'L410','EMB':'E120','EM2':'E120','ERD':'E145','EMJ':'E145',
+  'D38':'D328','D328J':'D328','J32':'JS32','BNI':'BN2P','BNT':'BN2T',
+  'A221':'A221','A223':'A223','A306':'A306','A310':'A310','A312':'A312','A313':'A313',
+  'A318':'A318','A3181':'A318','A3191':'A319','A319N':'A19N','A319CJ':'A19X',
+  'A3201':'A320','A3202':'A320','A320N':'A20N',
+  'A3211':'A321','A3212':'A321','A321N':'A21N','A321NLR':'A21N',
+  'A332':'A332','A332F':'A332','A333':'A333','A338':'A338','A339':'A339',
+  'A342':'A342','A343':'A343','A345':'A345','A346':'A346',
+  'A351':'A35K','A359':'A359','A388':'A388',
+  'B701':'B701','B702':'B702','B703':'B703','B704':'B704','B712':'B712','B720':'B720',
+  'B721':'B721','B722':'B722','B722A':'B722','B731':'B731','B732':'B732',
+  'B733':'B733','B734':'B734','B735':'B735','B736':'B736','B737':'B737',
+  'B737ER':'B737','B738':'B738','B739':'B739','B739ER':'B739',
+  'B737M8':'B38M','B737M9':'B39M','B741':'B741','B742':'B742','B743':'B743',
+  'B744':'B744','B748':'B748','B747SP':'B741','B747SR':'B741',
+  'B752':'B752','B753':'B753','B762':'B762','B762ER':'B762','B763':'B763',
+  'B763ER':'B763','B764':'B764','B764ER':'B764','B772':'B772','B772ER':'B772',
+  'B772LR':'B772','B773':'B773','B773ER':'B77W','B781':'B781','B788':'B788','B789':'B789',
+  'CRJ1':'CRJ1','CRJ2':'CRJ2','CRJ5':'CRJ5','CRJ7':'CRJ7','CRJ9':'CRJ9','CRJ10':'CRJX',
+  'DHC81':'DH8A','DHC82':'DH8B','DHC83':'DH8C','DHC84':'DH8D',
+  'E110':'E110','E120':'E120','E135':'E135','E140':'E140','E145':'E145',
+  'E170':'E170','E175':'E175','E190':'E190','E195':'E195','E190E2':'E290','E195E2':'E295',
+  'FK100':'F100','FK50':'F50','FK70':'F70','IL86':'IL86',
+  'MD11':'MD11','MD11F':'MD11','MD81':'MD81','MD82':'MD82','MD83':'MD83',
+  'MD87':'MD87','MD88':'MD88','DC85':'DC85','DC86':'DC86','DC87':'DC87',
+  'DC91':'DC91','DC92':'DC92','DC93':'DC93','DC94':'DC94','DC95':'DC95',
+  'DC101':'DC10','DC103':'DC10','DC104':'DC10',
+  'L10111':'L101','L10110':'L101','L10112':'L101','L10113':'L101','L10115':'L101',
+  'CONC':'CONC','AT43':'AT43','AT45':'AT45','AT72':'AT72','AT75':'AT75','AT76':'AT76',
+  'S340A':'SF34','S340B':'SF34','AT721':'AT72','AT722':'AT72','AT725':'AT75','AT726':'AT76',
+  'TU134A':'T134','TU154B':'T154','TU154M':'T154','TU2041':'T204','TU214':'T214',
+};
+
+function openSimbrief(f) {
+  const sb = AC_TO_SB[f.ac] || f.ac;
+  // Parse first flight number if available
+  const fltnum = f.fns ? f.fns.split(',')[0].trim() : '';
+  // Parse scheduled departure time
+  const deph = f.depTime ? f.depTime.slice(0,2) : '';
+  const depm = f.depTime ? f.depTime.slice(2,4) : '';
+  // Block time in hours/minutes
+  const steh = f.dur ? Math.floor(f.dur) : '';
+  const stem = f.dur ? Math.round((f.dur - Math.floor(f.dur)) * 60) : '';
+
+  const params = new URLSearchParams();
+  params.set('orig',    f.dep);
+  params.set('dest',    f.arr);
+  params.set('type',    sb);
+  params.set('airline', f.airline);
+  if (fltnum)  params.set('fltnum', fltnum);
+  if (deph)  { params.set('deph', deph); params.set('depm', depm); }
+  if (steh)  { params.set('steh', String(steh)); params.set('stem', String(stem)); }
+  params.set('find_sidstar', '1');
+  params.set('navlog',       '1');
+
+  window.open('https://dispatch.simbrief.com/options/custom?' + params.toString(), '_blank');
+}
+
 function selectRoute(f) {
   // clicking the already-selected route deselects it
   if (selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
@@ -1047,6 +1138,7 @@ function showDetail(f) {
       <div class="dfield"><div class="dfield-label">Sched dep / arr</div><div class="dfield-val td-mono">${(f.depTime && f.arrTime) ? f.depTime.slice(0,2)+':'+f.depTime.slice(2)+' → '+f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '—'}</div></div>
       ${f.fns ? `<div class="dfield" style="grid-column:1/-1"><div class="dfield-label">Flight number(s)</div><div class="dfield-val td-mono" style="white-space:normal;word-break:break-word;font-size:11px;">${f.fns.split(',').map(n=>f.airline+n).join('  ·  ')}</div></div>` : ''}
     </div>
+    <button class="simbrief-btn" onclick="openSimbrief(selRoute)">↗ Send to Simbrief</button>
   `;
 }
 
