@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+CiAgPHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHJ4PSIyMiIgZmlsbD0iIzFlMjQyYiI+PC9yZWN0PgogIDxjbGlwUGF0aCBpZD0iciI+PHJlY3Qgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIHJ4PSIyMiI+PC9yZWN0PjwvY2xpcFBhdGg+CiAgPGcgY2xpcC1wYXRoPSJ1cmwoI3IpIj4KICAgIDx0ZXh0IHg9IjUwIiB5PSI1MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsLCBIZWx2ZXRpY2EsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI3MDAiIGZvbnQtc2l6ZT0iNDAiIGZpbGw9IiNlY2U2ZGEiPkZTRDwvdGV4dD4KICAgIDxwYXRoIGQ9Ik0wIDYyIEwxMDAgNDggTDEwMCA1MiBMMCA2NiBaIiBmaWxsPSIjZWNlNmRhIj48L3BhdGg+CiAgICA8cGF0aCBkPSJNMCA2NyBMMTAwIDUzIEwxMDAgNjQgTDAgNzggWiIgZmlsbD0iI2RmN2E1MiI+PC9wYXRoPgogIDwvZz4KPC9zdmc+">
+<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAE5klEQVR4AbxUe0yVZRj/nY+LcdG2DNJAQhdbYDbTtGFEZhC3MaDEzdoqC5cN4tJMDiEwYIBoJTgoA0G5VSAkS24FJrM/VDApCAhJ5JLCOHgMDEIPePqeN9/jB3wIHBln5/ne93tuv9/zPs/7CZD8Vq60f2KFncMBmydXN4uinWdpptyEIYGEjoBo3DFuIHQqtIrdooODKPP9d6DchEFYPLlAG1KIxmzaL4QQFmESlkBHQgp6WUghTMIWxgwVQQsJLMUibEFk4ilVLuSesGkGJgxcce4hXDxzYoqQnpP74L3tOH/quM6nquQINqxbw8yHD8bq9NI80eGBzD7p4UAEJukAjWYMmTlFWOfsp5OtbwUzPy+3zXjD3xs3/h7E+6HRKC2vgaXFUoSH7mR2/iA9j6/7pRG+Xi4gctzOV1kC3Ci32lgvh7GREf4ZHkH9xSbEJaczkpygXExWXjH6Vdex2t4OVAAkvzkT4LGrbFdA2haul1uJaGf3VUacCpD6zJnAl1nfoOdqL8tBJKjP0/SX+UgfRkaGsHj0Eanq3pdQqiXHnW9v0w0TDRwNHveh46a+8vfp+svt91tlT2DyED7/ij+ocmmiXWExrPcdnT1MLddfZpA8KK9qQC3RQP4EJnjM8JKckskG7H5udEVtbaxwW6NB91//t4/7y54AN8qtdJWo77SSna6gmZkphsVbQZNOusni4erMrmpzazvKf6idYJ4zATp66v/G9c+wGYmPDGHgUQmp7Fry7DQXRJSE9vRdCNwdBzoJJ8f12L7Vi8VPIUADJtdznphWIsE/MrS6vx6gAw9RJmDbOyH4KHIfDqYfw/HSKpyr/5V9iOpPF+O7/DQcSt6Lj4MDKJV+M0BH/pTdKrhs3oQdb76GqD2ByEiNR2VxJs5WF6LoWCo+T1DC22MLu3bX2tuQn5KC3NgofBsRhsqIINxMUzKZcgK4+3t4yWI8LX653F2cQVcy7pNgZKcnorr0KH6uLMDXWZ8hRhkE1y0vYImZCTqbGlGdl4O8mEgUKUPxY+SHuFWYgrUNJXBVN8DHsA9+SzXwsloEJyvzuyiAsHaNPbzdXwbdc+oXl9Nlucj9aj8So8Pw4qbnYGwg4NKFOlQcyUBeVASKlSE4n7gHipJ0bGw+CbehRvgsUsHXYhwe1g/BcbkZbBYbw0Ch0IHJbQSqKlasjqqsrKhGYWY28vYlIX9vOEqUwTgTHQyTk4fh2FYJj+FW+Jqq4fuYFm7WJtiwzAyPmxvJ5Z2VrrBNDYH3glanjlPwvHUJvuaD8FmmwKvWpnjW0hSWpnMDGdHcQfuNUdT23ETBH2ocuNCH0Noe+JddxktFbTr54jeVfkNI5Q3dHkerehQ13UPIabmOpLo+BP3UDb/vL8PjRDsCqrsQc/YaMhpVKOsYREP/CPpHxih0gkw7hOSlHh1D08C/qOocQvbvA4g/14tdNV3wLv2TCe1JR7aqzkHmSzEUO1vRESgXWWY0qRhrYu8pVkHVUFVJdb2sSqqWqqbqZwswk5/Ae7Jf7FNBq5r1jfo3LPZxpuD5sNMJtMxHIj1ztAhahbZCz+AHDiNswXBMm/bAmfRMQNjClSutXSKTd/XMoXcYYRI2zQB62luOkkLvbHMMJCzCpDBGgDakMBi/YysaPxXf520wxVz830K5CYOwuPI/AAAA///HQgnaAAAABklEQVQDAJS2VFWARaIUAAAAAElFTkSuQmCC">
+<link rel="icon" type="image/png" sizes="16x16" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACMklEQVR4AZyQWUhUYRTHf3PBKbWHJJtoUSENyhRSC6ayMYJQsIwwxGklbKVQobEexKJ6k8rlISyEIEjbbHmwDCJyC0lUKipsmLRxzOZWOOhMgWPevu8LJcyHocs5h3POfzn3Xg3xxMYnVsYmrPSKNEJMr9QIKZpqTKYiMVhEhhoWhEZqNdHYQ1X9wzOZ7JpYWkT+b1ikAdmZG7l7vZo1qcnKaHLelZdDU0OtwutqL3K0wK54NRVnFU8WZSCbBZZorlSeUwT963fmREZw4vh+XrzsofHJc0lRee3GPaLnRU0d09RWFK/+jcPFp9mxt5DO7jdk5R4g1bad5cuWqsuCMmNMGfyNyk9obaqju+U+MUsW4vYMYTaHcXBfHudLi3j9tpcBsVudkoQyaBSvOHlZGsl5Q9ZOtuYfoaSsnIjw2bR3dEsIxoPkWJMp2mJlW1wkWlzMYtKtaeTnZlNSWKCudj29SdXJAo5tTiF7URhpP/pJcDbjKncwWlNGoL6CdX4nNrMP7VBGIpnzDVJGnMS/f8anCw78V8+wqr+N9T/7sM0aYe1cg6QoM+MTBp1fAjxw+bj8Sqe0fRAtfcyNLTyANcrECkHyByfoGArQ4BymukfnVKuH3Y/72HTnA/ZHH3G0eKjo8nKrd5i2QT/aJTE4mj0KzLjdyx5BliIplibSbGB0jF+G8ecfTKvaQ5dP7/QG+OwPToNCGnUNw6gPiToTSWg1t+tdsTCpErguMtTQpUZqfwMAAP//TiGp7wAAAAZJREFUAwASRuz74MGSfAAAAABJRU5ErkJggg==">
+<link rel="apple-touch-icon" sizes="180x180" href="data:image/png;base64,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">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlightSim Dispatch</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap');
+:root {
+  --bg:     #1a1a1a;
+  --bg2:    #212121;
+  --bg3:    #2a2a2a;
+  --bg4:    #333333;
+  --border: rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.14);
+  --text:   #f0ede8;
+  --text2:  #b8b3aa;
+  --text3:  #7a756e;
+  --accent: #d97757;
+  --accent2:#c4623f;
+  --accent-dim: rgba(217,119,87,0.14);
+  --accent-dim2:rgba(217,119,87,0.08);
+  --green:  #5fad7e;
+  --green-dim: rgba(95,173,126,0.12);
+  --amber:  #c9a227;
+  --amber-dim: rgba(201,162,39,0.12);
+  --blue:   #7fa8d4;
+  --mono:   'Geist Mono', 'Roboto Mono', monospace;
+  --sans:   'Geist', 'Inter', -apple-system, sans-serif;
+  --r: 4px;
+  --r2: 6px;
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { height:100%; overflow:hidden; }
+body { font-family:var(--sans); background:var(--bg); color:var(--text); font-size:13px; line-height:1.4; }
+
+/* ── APP SHELL ── */
+.app { display:grid; grid-template-rows:auto 1fr; height:100vh; }
+
+/* ── TITLEBAR ── */
+.titlebar { display:flex; align-items:center; gap:12px; padding:0 14px; height:36px; background:var(--bg2); border-bottom:2px solid var(--accent); flex-shrink:0; }
+.titlebar-logo { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--accent); letter-spacing:.08em; text-transform:uppercase; }
+.titlebar-sep { width:1px; height:16px; background:var(--border2); }
+.titlebar-sub { font-size:11px; color:var(--text3); font-family:var(--mono); }
+.titlebar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+.titlebar-version { font-size:10px; font-family:var(--mono); color:var(--text3); }
+#load-status { font-size:11px; font-family:var(--mono); color:var(--amber); }
+
+/* ── BODY SPLIT ── */
+.body { display:grid; grid-template-columns:380px 1fr; overflow:hidden; }
+.left { display:flex; flex-direction:column; border-right:1px solid var(--border2); overflow:hidden; background:var(--bg2); }
+.right { display:flex; flex-direction:column; overflow:hidden; }
+
+/* ── SMART SEARCH ── */
+.smart-search-wrap { padding:10px 12px 8px; border-bottom:1px solid var(--border); flex-shrink:0; min-height:0; }
+.smart-label { font-size:10px; color:var(--text3); font-weight:500; text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; }
+.smart-row { display:flex; gap:5px; }
+.smart-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--sans); font-size:12px; padding:5px 9px; outline:none; transition:border-color .15s; }
+.smart-input:focus { border-color:var(--accent); }
+.smart-input::placeholder { color:var(--text3); font-size:11px; }
+.smart-btn { background:var(--accent); border:none; border-radius:var(--r); color:#fff; font-family:var(--mono); font-size:11px; font-weight:600; padding:0 12px; cursor:pointer; transition:background .18s cubic-bezier(.4,0,.2,1), transform .12s cubic-bezier(.4,0,.2,1), box-shadow .18s; letter-spacing:.04em; }
+.smart-btn:hover { box-shadow:0 0 0 3px rgba(217,119,87,0.22); }
+.smart-btn:active { transform:scale(0.96); box-shadow:none; }
+.smart-btn:hover { background:var(--accent2); }
+.smart-tokens { display:flex; flex-wrap:wrap; gap:3px; margin-top:5px; min-height:14px; }
+.token { font-size:10px; font-family:var(--mono); padding:1px 6px; border-radius:2px; border:1px solid transparent; }
+.token-dep { background:var(--green-dim); color:var(--green); border-color:rgba(95,173,126,.25); }
+.token-arr { background:var(--amber-dim); color:var(--amber); border-color:rgba(201,162,39,.25); }
+.token-ac { background:var(--accent-dim); color:var(--accent); border-color:rgba(217,119,87,.25); }
+.token-airline { background:rgba(127,168,212,.1); color:var(--blue); border-color:rgba(127,168,212,.25); }
+.token-year { background:rgba(95,173,126,.1); color:var(--green); border-color:rgba(95,173,126,.25); }
+.token-dur { background:rgba(201,162,39,.1); color:var(--amber); border-color:rgba(201,162,39,.25); }
+.smart-hint { font-size:10px; color:var(--text3); margin-top:4px; font-family:var(--mono); }
+
+/* ── FILTERS ── */
+.filters { padding:10px 12px; overflow-y:auto; flex-shrink:1; min-height:0; max-height:62vh; }
+.fg { margin-bottom:8px; }
+.fg:last-child { margin-bottom:0; }
+.flabel { font-size:11px; color:var(--text2); font-weight:500; margin-bottom:5px; display:block; }
+.flabel-checkbox { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text); cursor:pointer; margin-bottom:3px; }
+.flabel-checkbox input[type=checkbox] { margin:0; }
+
+input[type=text], select {
+  width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r);
+  color:var(--text); font-family:var(--sans); font-size:12px; padding:4px 8px;
+  outline:none; transition:border-color .15s; appearance:none;
+}
+input[type=text]:focus, select:focus { border-color:var(--accent); }
+select {
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a756e'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 8px center; padding-right:24px;
+}
+optgroup { color:var(--text3); font-size:10px; }
+option { color:var(--text); background:var(--bg3); font-size:12px; }
+
+.icao-pair { display:grid; grid-template-columns:1fr 20px 1fr; gap:4px; align-items:center; }
+.icao-arrow { text-align:center; color:var(--text3); font-size:13px; }
+.andor-row { display:flex; gap:10px; margin-top:5px; }
+.andor-row label { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2); cursor:pointer; }
+input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:pointer; }
+.role-row { display:flex; gap:14px; }
+.role-row label { display:flex; align-items:center; gap:5px; font-size:12px; color:var(--text2); cursor:pointer; }
+
+/* ── DUAL RANGE SLIDERS ── */
+.dual-wrap { position:relative; padding:4px 0; }
+.dual-track { position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); height:2px; background:var(--bg4); border-radius:1px; }
+.dual-fill { position:absolute; top:50%; transform:translateY(-50%); height:2px; background:var(--accent); border-radius:1px; }
+.dual-wrap input[type=range] { position:absolute; left:0; top:50%; transform:translateY(-50%); width:100%; pointer-events:none; background:transparent; border:none; padding:0; appearance:none; -webkit-appearance:none; height:20px; }
+.dual-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; background:var(--accent); cursor:pointer; pointer-events:all; border:2px solid var(--bg2); }
+.dual-wrap input[type=range]::-webkit-slider-runnable-track { background:transparent; }
+.range-readout { display:flex; justify-content:space-between; font-size:11px; font-family:var(--mono); color:var(--accent); margin-bottom:3px; }
+.range-bounds { display:flex; justify-content:space-between; font-size:10px; color:var(--text3); font-family:var(--mono); margin-top:3px; }
+
+/* ── DEPARTS FILTER ── */
+.departs-row { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); }
+.departs-row input[type=checkbox] { margin:0; }
+.departs-row input[type=number] { width:52px; text-align:center; padding:3px 5px; font-family:var(--mono); }
+.departs-sep { color:var(--text3); }
+
+/* ── BUTTONS ── */
+.btn-row { display:flex; gap:6px; margin-top:6px; }
+.btn { flex:1; padding:5px 0; border-radius:var(--r); font-family:var(--sans); font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border2); background:var(--bg3); color:var(--text2); transition:background .18s cubic-bezier(.4,0,.2,1), color .18s, border-color .18s, transform .12s cubic-bezier(.4,0,.2,1), box-shadow .18s; }
+.btn:hover { background:var(--bg4); color:var(--text); }
+.btn:active { transform:scale(0.97); }
+.btn-primary { background:var(--accent-dim); color:var(--accent); border-color:rgba(217,119,87,.3); }
+.btn-primary:hover { background:var(--accent); color:#fff; box-shadow:0 0 0 3px rgba(217,119,87,0.18); }
+.btn-primary:active { transform:scale(0.97); box-shadow:none; }
+
+/* ── FLIGHT LIST (left bottom) ── */
+.results-section { flex:1; display:flex; flex-direction:column; overflow:hidden; border-top:1px solid var(--border2); min-height:80px; }
+.results-header { padding:5px 12px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; display:flex; justify-content:space-between; align-items:center; }
+.results-header-title { font-size:10px; font-family:var(--mono); font-weight:500; color:var(--text2); text-transform:uppercase; letter-spacing:.06em; }
+.results-count { font-size:10px; font-family:var(--mono); color:var(--accent); }
+.flight-list { flex:1; overflow-y:auto; }
+.flight-item { display:grid; grid-template-columns:1fr auto auto; padding:5px 12px; border-bottom:1px solid var(--border); cursor:pointer; gap:8px; align-items:center; transition:background .1s; }
+.flight-item:hover { background:var(--bg3); }
+.flight-item.active { background:var(--accent-dim2); border-left:2px solid var(--accent); padding-left:10px; }
+.fi-num { font-size:12px; font-weight:500; color:var(--text); font-family:var(--mono); }
+.fi-ac { font-size:11px; color:var(--text2); font-family:var(--mono); }
+.fi-year { font-size:10px; font-family:var(--mono); color:var(--text3); }
+
+/* ── DETAIL PANEL ── */
+.detail-panel { border-top:1px solid var(--border); padding:10px 12px; flex-shrink:0; flex-grow:1; background:var(--bg2); min-height:160px; overflow-y:auto; }
+.detail-empty { font-size:11px; color:var(--text3); font-family:var(--mono); padding:24px 0; text-align:center; }
+.detail-title { font-size:12px; font-weight:600; color:var(--text); margin-bottom:7px; }
+.detail-route { display:flex; align-items:center; gap:8px; background:var(--bg3); border-radius:var(--r); padding:7px 10px; border:1px solid var(--border); margin-bottom:6px; }
+.dr-icao { font-family:var(--mono); font-size:15px; font-weight:600; color:var(--accent); }
+.dr-name { font-size:10px; color:var(--text3); margin-top:2px; }
+.dr-arrow { flex:1; text-align:center; color:var(--text3); font-size:14px; }
+.detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.dfield { background:var(--bg3); border-radius:var(--r); padding:5px 8px; border:1px solid var(--border); }
+.dfield-label { font-size:9px; color:var(--text3); font-weight:500; text-transform:uppercase; letter-spacing:.08em; margin-bottom:2px; }
+.dfield-val { font-size:12px; font-weight:500; color:var(--text); font-family:var(--mono); }
+.dfield-sub { font-size:10px; color:var(--text3); margin-top:1px; }
+
+/* ── RIGHT PANEL ── */
+.right-topbar { display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; flex-wrap:wrap; }
+.right-topbar select { width:auto; flex:0 0 auto; }
+.sort-label { font-size:11px; color:var(--text3); white-space:nowrap; }
+.filter-note { font-size:10px; font-family:var(--mono); color:var(--text3); margin-left:auto; }
+.filter-note span { color:var(--accent); }
+
+/* ── TABLE ── */
+.table-wrap { flex:1; overflow-y:auto; }
+.table-head {
+  display:grid;
+  grid-template-columns: 90px 70px 70px 1fr 110px 60px 62px;
+  padding:0 12px; border-bottom:1px solid var(--border2);
+  background:var(--bg2); position:sticky; top:0; z-index:2;
+}
+.th { padding:6px 4px; font-size:10px; font-family:var(--sans); font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.06em; cursor:pointer; user-select:none; display:flex; align-items:center; gap:3px; }
+.th:hover { color:var(--text2); }
+.th.asc::after { content:' ↑'; color:var(--accent); }
+.th.desc::after { content:' ↓'; color:var(--accent); }
+.tr {
+  display:grid;
+  grid-template-columns: 90px 70px 70px 1fr 110px 60px 62px;
+  padding:0 12px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .08s; align-items:center;
+}
+.tr:hover { background:var(--bg3); }
+.tr.active { background:var(--accent-dim2); border-left:2px solid var(--accent); padding-left:10px; }
+.td { padding:5px 4px; font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.td-sub { font-size:10px; color:var(--text3); margin-top:1px; overflow:hidden; text-overflow:ellipsis; }
+.td-mono { font-family:var(--mono); }
+.badge { display:inline-block; font-size:9px; padding:1px 6px; border-radius:2px; font-family:var(--mono); font-weight:600; letter-spacing:.04em; border:1px solid transparent; }
+.badge-s { background:rgba(201,162,39,.15); color:#e0b84a; border-color:rgba(201,162,39,.3); }
+.badge-w { background:rgba(127,168,212,.12); color:#8bbfe0; border-color:rgba(127,168,212,.28); }
+.badge-cargo { background:rgba(201,162,39,.12); color:#c9a227; border-color:rgba(201,162,39,.28); }
+
+/* ── BOTTOMBAR ── */
+.bottombar { display:flex; gap:8px; padding:7px 12px; border-top:1px solid var(--border2); background:var(--bg2); flex-shrink:0; align-items:center; }
+.bottombar .btn { flex:0 0 auto; padding:4px 16px; }
+.bottombar-stats { font-size:10px; font-family:var(--mono); color:var(--text3); margin-left:auto; }
+.bottombar-stats span { color:var(--text2); }
+
+/* ── MISC ── */
+.no-results { padding:40px 0; text-align:center; color:var(--text3); font-family:var(--mono); font-size:12px; }
+.no-results-big { font-size:28px; margin-bottom:8px; }
+.loading-overlay { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; z-index:100; }
+.loading-spinner { width:28px; height:28px; border:2px solid var(--bg4); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { font-family:var(--mono); font-size:12px; color:var(--text2); }
+.loading-sub { font-family:var(--mono); font-size:11px; color:var(--text3); }
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:2px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text3); }
+
+/* ── AIRCRAFT MULTI-SELECT ── */
+.ac-tag {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11px; font-family:var(--mono);
+  padding:3px 6px 3px 9px; border-radius:var(--r);
+  background:var(--accent-dim); color:var(--accent);
+  border:1px solid rgba(217,119,87,.35);
+}
+.ac-tag-x {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:14px; height:14px; border-radius:2px;
+  font-size:13px; line-height:1; cursor:pointer;
+  color:var(--accent); opacity:.55;
+  transition:opacity .12s, background .12s;
+}
+.ac-tag-x:hover { opacity:1; background:rgba(217,119,87,.25); }
+.ac-variant {
+  display:inline-block; font-size:10px; font-family:var(--sans);
+  padding:2px 8px; border-radius:2px; cursor:pointer;
+  border:1px solid rgba(95,173,126,.35);
+  background:var(--green-dim); color:var(--green);
+  transition:all .12s; user-select:none; white-space:nowrap;
+}
+.ac-variant:hover { filter:brightness(1.2); }
+.ac-variant.excluded {
+  background:rgba(217,119,87,.08); color:var(--accent2);
+  border-color:rgba(217,119,87,.25); text-decoration:line-through;
+  opacity:.65;
+}
+.ac-variant.excluded:hover { opacity:1; }
+
+/* ── SIMBRIEF BUTTON ── */
+.simbrief-btn {
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  width:100%; margin-top:8px;
+  padding:7px 12px; border-radius:var(--r);
+  background:rgba(95,173,126,0.1);
+  border:1px solid rgba(95,173,126,0.45);
+  color:var(--green); font-family:var(--mono);
+  font-size:11px; font-weight:600; letter-spacing:.06em;
+  cursor:pointer; text-align:center;
+  transition:background .2s cubic-bezier(.4,0,.2,1), border-color .2s, color .2s, transform .12s cubic-bezier(.4,0,.2,1), box-shadow .2s;
+  text-transform:uppercase;
+}
+.simbrief-btn:hover {
+  background:rgba(95,173,126,0.22);
+  border-color:rgba(95,173,126,0.7);
+  color:#7fcfa0;
+  box-shadow:0 0 0 3px rgba(95,173,126,0.16);
+}
+.simbrief-btn:active {
+  transform:scale(0.97);
+  box-shadow:none;
+}
+.simbrief-btn .sb-icon {
+  font-size:13px; transition:transform .2s cubic-bezier(.4,0,.2,1);
+}
+.simbrief-btn:hover .sb-icon {
+  transform:translateX(2px) translateY(-2px);
+}
+
+
+/* ── SORT SEGMENTED CONTROL ── */
+.sort-seg-wrap { display:flex; align-items:center; gap:8px; }
+.sort-seg { display:flex; background:var(--bg3); border:1px solid var(--border2); border-radius:22px; padding:3px; gap:2px; position:relative; }
+.sort-seg-btn {
+  position:relative; z-index:1;
+  font-family:var(--mono); font-size:10.7px; font-weight:500;
+  padding:4px 11px; border-radius:17px; cursor:pointer;
+  border:none; background:transparent;
+  color:var(--text3); letter-spacing:.04em;
+  transition:color .15s cubic-bezier(.4,0,.2,1);
+  white-space:nowrap;
+}
+.sort-seg-btn.active { color:var(--text); }
+.seg-arrow { display:inline-block; width:12px; text-align:left; font-size:9px; opacity:.7; }
+.sort-seg-indicator {
+  position:absolute; top:3px; bottom:3px;
+  background:var(--bg4); border-radius:15px;
+  border:1px solid var(--border2);
+  transition:left .16s cubic-bezier(.4,0,.2,1), width .16s cubic-bezier(.4,0,.2,1);
+  pointer-events:none; z-index:0;
+}
+
+/* ── VIRTUAL SCROLLER ── */
+.vscroll-sizer  { position:relative; width:100%; }
+.vscroll-window { position:absolute; top:0; left:0; right:0; }
+</style>
+</head>
+<body>
+<div id="loading-overlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Initializing FlightSim Dispatch...</div>
+  <div class="loading-sub" id="loading-sub">604,530 routes · 1950–2024</div>
+</div>
+
+<div class="app">
+  <div class="titlebar">
+    <span class="titlebar-logo">FlightSim Dispatch</span>
+    <span class="titlebar-sep"></span>
+    <span class="titlebar-sub">v3.0 · Historical Route Database</span>
+    <div class="titlebar-right">
+      <span id="load-status"></span>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- ══ LEFT PANEL ══ -->
+    <div class="left">
+
+      <!-- Quick search -->
+      <div class="smart-search-wrap">
+        <div class="smart-row">
+          <input class="smart-input" id="smart-input" type="text"
+            placeholder='Search: "KDFW KMIA" · "pan am 747 1970s" · "dallas london"'>
+          <button class="smart-btn" onclick="parseSmartSearch()">GO</button>
+        </div>
+        <div class="smart-tokens" id="smart-tokens"></div>
+        <div class="smart-hint" id="smart-hint">ICAO · city · airline · aircraft · decade</div>
+      </div>
+
+      <div class="filters">
+
+        <!-- Specify airport details checkbox + dep/arr -->
+        <div class="fg">
+          <label class="flabel-checkbox">
+            <input type="checkbox" id="specify-airport" checked onchange="toggleAirportFields()">
+            Specify airport details?
+          </label>
+          <div id="airport-fields">
+            <div style="font-size:11px;color:var(--text3);margin:4px 0 3px;">Departure ICAO (comma-separated for multiple)</div>
+            <input type="text" id="dep" placeholder="e.g. KDFW" oninput="queueRender()">
+            <div style="display:flex;gap:10px;margin:4px 0;">
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="andor" value="AND" checked onchange="queueRender()"> AND
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="andor" value="OR" onchange="queueRender()"> OR
+              </label>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">Arrival ICAO (comma-separated for multiple)</div>
+            <input type="text" id="arr" placeholder="e.g. KMIA" oninput="queueRender()">
+          </div>
+        </div>
+
+        <!-- Specify airlines -->
+        <div class="fg">
+          <div class="flabel">Specify airlines (ICAO code, comma-separated)</div>
+          <div id="airline-field" style="margin-top:4px;">
+            <input type="text" id="airline-icao" placeholder="e.g. AAL, BAW, QH" oninput="queueRender()">
+          </div>
+        </div>
+
+        <!-- Role -->
+        <div class="fg">
+          <div class="flabel">Role</div>
+          <div class="role-row">
+            <label><input type="checkbox" id="pax" checked onchange="queueRender()"> PAX</label>
+            <label><input type="checkbox" id="cargo" checked onchange="queueRender()"> Cargo</label>
+          </div>
+        </div>
+
+        <!-- Aircraft family multi-select -->
+        <div class="fg">
+          <div class="flabel">Aircraft family</div>
+          <select id="ac-family-picker" onchange="acFamilyAdd(this)">
+            <option value="">— add aircraft family —</option>
+            <optgroup label="─── Airbus ───">
+              <option value="Aerospatiale/BAC Concorde">Aerospatiale/BAC Concorde</option>
+              <option value="Airbus A220">Airbus A220/Bombardier CS</option>
+              <option value="Airbus A300">Airbus A300</option>
+              <option value="Airbus A310">Airbus A310</option>
+              <option value="CEO:Airbus A318">Airbus A318</option>
+              <option value="CEO:Airbus A319">Airbus A319 CEO</option>
+              <option value="NEO:Airbus A319">Airbus A319 NEO</option>
+              <option value="CEO:Airbus A320">Airbus A320 CEO</option>
+              <option value="NEO:Airbus A320">Airbus A320 NEO</option>
+              <option value="CEO:Airbus A321">Airbus A321 CEO</option>
+              <option value="NEO:Airbus A321">Airbus A321 NEO</option>
+              <option value="CEO:Airbus A330">Airbus A330 CEO</option>
+              <option value="NEO:Airbus A330">Airbus A330 NEO</option>
+              <option value="Airbus A340">Airbus A340</option>
+              <option value="Airbus A350">Airbus A350</option>
+              <option value="Airbus A380">Airbus A380</option>
+            </optgroup>
+            <optgroup label="─── Boeing ───">
+              <option value="Boeing 707">Boeing 707</option>
+              <option value="Boeing 717">Boeing 717</option>
+              <option value="Boeing 727">Boeing 727</option>
+              <option value="Boeing 737-100">Boeing 737 Original (-100 and -200)</option>
+              <option value="Boeing 737-300">Boeing 737 Classic (-300 to -500)</option>
+              <option value="Boeing 737-600">Boeing 737 NG (600-900)</option>
+              <option value="Boeing 737 MAX">Boeing 737 MAX</option>
+              <option value="747C:Boeing 747">Boeing 747 Classic (-100/-200/-300/SP)</option>
+              <option value="747N:Boeing 747">Boeing 747 NG (-400/-8)</option>
+              <option value="Boeing 757">Boeing 757</option>
+              <option value="Boeing 767">Boeing 767</option>
+              <option value="Boeing 777">Boeing 777</option>
+              <option value="Boeing 787">Boeing 787</option>
+            </optgroup>
+            <optgroup label="─── Douglas / McDonnell Douglas ───">
+              <option value="Douglas DC-8">Douglas DC-8</option>
+              <option value="Douglas DC-9">Douglas DC-9</option>
+              <option value="Douglas DC-10">Douglas DC-10</option>
+              <option value="McDonnell Douglas MD-11">McDonnell Douglas MD-11</option>
+              <option value="McDonnell Douglas MD-8">McDonnell Douglas MD-80</option>
+              <option value="McDonnell Douglas MD-90">McDonnell Douglas MD-90</option>
+            </optgroup>
+            <optgroup label="─── Lockheed ───">
+              <option value="Lockheed Constellation">Lockheed Constellation</option>
+              <option value="Lockheed Electra">Lockheed Electra</option>
+              <option value="Lockheed L-1011">Lockheed L-1011 TriStar</option>
+            </optgroup>
+            <optgroup label="─── British ───">
+              <option value="BAC One-Eleven">BAC One-Eleven</option>
+              <option value="BAe 146">BAe 146 / Avro RJ</option>
+              <option value="Vickers VC">Vickers VC10</option>
+            </optgroup>
+            <optgroup label="─── Soviet / Russian ───">
+              <option value="Ilyushin Il-62">Ilyushin Il-62</option>
+              <option value="Ilyushin Il-86">Ilyushin Il-86</option>
+              <option value="Ilyushin Il-96">Ilyushin Il-96</option>
+              <option value="Tupolev Tu-134">Tupolev Tu-134</option>
+              <option value="Tupolev Tu-154">Tupolev Tu-154</option>
+            </optgroup>
+            <optgroup label="─── Regional ───">
+              <option value="ATR">ATR 42/72</option>
+              <option value="Bombardier CRJ">Bombardier CRJ</option>
+              <option value="Convair">Convair 880/990</option>
+              <option value="de Havilland Canada Dash 8">De Havilland Dash 8</option>
+              <option value="Embraer ERJ">Embraer ERJ</option>
+              <option value="Embraer E1">Embraer E-Jet 1st Gen</option>
+              <option value="Embraer E2">Embraer E-Jet 2nd Gen</option>
+              <option value="Fokker">Fokker</option>
+            </optgroup>
+          </select>
+          <!-- Selected family tags -->
+          <div id="ac-family-tags" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;min-height:4px;"></div>
+          <!-- Variant subtype panel -->
+          <div id="ac-variant-panel" style="display:none;margin-top:6px;border:1px solid var(--border2);border-radius:var(--r);background:var(--bg3);max-height:160px;overflow-y:auto;">
+            <div style="padding:4px 8px;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+              <span>Subtypes — click to exclude</span>
+              <span id="ac-variant-count" style="color:var(--accent);"></span>
+            </div>
+            <div id="ac-variant-list" style="padding:5px;display:flex;flex-wrap:wrap;gap:3px 4px;"></div>
+          </div>
+        </div>
+
+        <!-- Duration slider -->
+        <div class="fg">
+          <div class="flabel">Flight Duration (hrs):</div>
+          <div class="range-readout"><span id="dur-lo-v">0</span><span id="dur-hi-v">22</span></div>
+          <div class="dual-wrap" style="height:20px;">
+            <div class="dual-track"></div>
+            <div class="dual-fill" id="dur-fill"></div>
+            <input type="range" id="dur-lo" min="0" max="22" value="0" step="1">
+            <input type="range" id="dur-hi" min="0" max="22" value="22" step="1">
+          </div>
+          <div class="range-bounds"><span>0</span><span>22</span></div>
+        </div>
+
+        <!-- Year slider -->
+        <div class="fg">
+          <div class="flabel">Flight Year:</div>
+          <div class="range-readout"><span id="yr-lo-v">1950</span><span id="yr-hi-v">2024</span></div>
+          <div class="dual-wrap" style="height:20px;">
+            <div class="dual-track"></div>
+            <div class="dual-fill" id="yr-fill"></div>
+            <input type="range" id="yr-lo" min="1950" max="2024" value="1950" step="1">
+            <input type="range" id="yr-hi" min="1950" max="2024" value="2024" step="1">
+          </div>
+          <div class="range-bounds"><span>1950</span><span>2025</span></div>
+        </div>
+
+        <!-- Departs in next X minutes -->
+        <div class="fg">
+          <div class="departs-row">
+            <input type="checkbox" id="departs-enable" onchange="queueRender()">
+            <span>Departs in next (Zulu)</span>
+            <input type="number" id="departs-lo" value="45" min="0" max="1439" onchange="queueRender()">
+            <span class="departs-sep">-</span>
+            <input type="number" id="departs-hi" value="60" min="0" max="1439" onchange="queueRender()">
+            <span>minutes</span>
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-bottom:8px;">
+          <button class="btn btn-primary" onclick="randomFlight()">Random Flight</button>
+          <button class="btn" onclick="resetAll()">Reset All</button>
+        </div>
+      </div>
+
+      <!-- Detail panel -->
+      <div class="detail-panel" id="detail-panel">
+        <div class="detail-empty">Select a flight to view route details</div>
+      </div>
+
+    </div>
+
+    <!-- ══ RIGHT PANEL ══ -->
+    <div class="right">
+      <div class="right-topbar">
+        <span class="sort-label">Sort:</span>
+        <div class="sort-seg-wrap">
+          <div class="sort-seg" id="sort-seg">
+            <div class="sort-seg-indicator" id="sort-indicator"></div>
+            <button class="sort-seg-btn active" data-sort="airline" onclick="setSortSeg(this)">Airline<span class="seg-arrow"> ↑</span></button>
+            <button class="sort-seg-btn" data-sort="dep" onclick="setSortSeg(this)">Dep<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="arr" onclick="setSortSeg(this)">Arr<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="ac" onclick="setSortSeg(this)">Aircraft<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="dur" onclick="setSortSeg(this)">Duration<span class="seg-arrow"></span></button>
+            <button class="sort-seg-btn" data-sort="year" onclick="setSortSeg(this)">Year<span class="seg-arrow"></span></button>
+          </div>
+        </div>
+        <span class="filter-note" id="filter-note"></span>
+      </div>
+      <select id="sort-sel" style="display:none;" onchange="setSort(this.value)">
+        <option value="airline">Airline</option>
+        <option value="dep">Departure</option>
+        <option value="arr">Arrival</option>
+        <option value="ac">Aircraft</option>
+        <option value="dur-asc">Duration (short first)</option>
+        <option value="dur-desc">Duration (long first)</option>
+        <option value="year-asc">Year (oldest first)</option>
+        <option value="year-desc">Year (newest first)</option>
+      </select>
+
+      <div class="table-head">
+        <div class="th" id="th-airline" onclick="setSort('airline')">Airline</div>
+        <div class="th" id="th-dep"     onclick="setSort('dep')">From</div>
+        <div class="th" id="th-arr"     onclick="setSort('arr')">To</div>
+        <div class="th" id="th-ac"      onclick="setSort('ac')">Aircraft</div>
+        <div class="th"                 onclick="setSort('dep')">Dep / Arr</div>
+        <div class="th" id="th-dur"     onclick="setSort('dur')">Dur.</div>
+        <div class="th" id="th-year"    onclick="setSort('year')">Year</div>
+      </div>
+
+      <div class="table-wrap" id="table-wrap">
+        <div class="no-results" style="padding:60px 0;"><div class="no-results-big">⟳</div>Loading...</div>
+      </div>
+
+      <div class="bottombar">
+        <button class="btn" onclick="randomFlight()">Random Flight</button>
+        <button class="btn" onclick="queueRender()">Refresh Table</button>
+        <span class="bottombar-stats" id="bottombar-stats"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Data loaded at runtime from Cloudflare Worker
+const AP_MAP = {};
+const AL_MAP = {};
+const AC_MAP = {};
+const CITY_MAP = {};
+let ROUTES_B64_VALUE = "";
+
+// ── EMBEDDED DATA ──
+
+// ── STATE ──
+let DB = [];
+// ── AIRCRAFT MULTI-SELECT STATE ──
+let selAcFamilies = new Set();   // e.g. {"Boeing 747-400", "Airbus A320"}
+let excludedVariants = new Set(); // ac codes user has clicked off
+let IDX_DEP = new Map();   // dep ICAO -> [i, ...]
+let IDX_ARR = new Map();   // arr ICAO -> [i, ...]
+let IDX_AL  = new Map();   // airline  -> [i, ...]
+let IDX_FN  = new Map();   // airline+flightnum -> [i, ...]
+let sortCol = "airline", sortDir = "asc";
+let selRoute = null, selFlightIdx = null;
+let renderTimer = null;
+let sliderTimer = null;
+
+// ── DECOMPRESS + PARSE ──
+async function loadData() {
+  const loadText = document.getElementById('loading-text');
+  loadText.textContent = 'Fetching route database...';
+  await new Promise(r => setTimeout(r, 10));
+
+  let dataText;
+  try {
+    const res = await fetch('https://fsd-data.vorahamaad.workers.dev', {
+      headers: { 'X-FSD-Key': 'fsd-9x2Kp$vR#mQ7wL@nT4hZ' }
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    dataText = await res.text();
+  } catch (err) {
+    loadText.textContent = 'Failed to load data: ' + err.message;
+    console.error('Data fetch failed:', err);
+    return;
+  }
+
+  loadText.textContent = 'Initialising database...';
+  await new Promise(r => setTimeout(r, 10));
+
+  // Execute the data script in this scope so AP_MAP, AL_MAP, AC_MAP,
+  // CITY_MAP and ROUTES_B64 become available as local variables.
+  const dataFn = new Function(dataText + '\nreturn {AP_MAP,AL_MAP,AC_MAP,CITY_MAP,ROUTES_B64};');
+  const data = dataFn();
+  // Assign into the outer scope variables the rest of the app uses
+  Object.assign(AP_MAP, data.AP_MAP);
+  Object.assign(AL_MAP, data.AL_MAP);
+  Object.assign(AC_MAP, data.AC_MAP);
+  Object.assign(CITY_MAP, data.CITY_MAP);
+  ROUTES_B64_VALUE = data.ROUTES_B64;
+  // Rebuild sets that were populated at parse time from empty stubs
+  ICAO_AP_SET = new Set(Object.keys(AP_MAP));
+  ICAO_AL_SET = new Set(Object.keys(AL_MAP));
+
+  loadText.textContent = 'Decompressing route database...';
+  await new Promise(r => setTimeout(r, 10));
+  
+  // Fast base64 decode via native browser fetch — avoids the slow
+  // atob+charCodeAt loop which iterates ~8M characters in JS
+  const b64resp = await fetch('data:application/octet-stream;base64,' + ROUTES_B64_VALUE);
+  const bytes = new Uint8Array(await b64resp.arrayBuffer());
+  
+  // Decompress gzip
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  const reader = ds.readable.getReader();
+  writer.write(bytes);
+  writer.close();
+  
+  const chunks = [];
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  const text = new TextDecoder().decode(result);
+  
+  loadText.textContent = 'Parsing 604,530 routes...';
+  await new Promise(r => setTimeout(r, 10));
+  
+  // Parse pipe-delimited and build indexes in a single pass
+  const lines = text.split('\n');
+  DB = [];
+  IDX_DEP.clear(); IDX_ARR.clear(); IDX_AL.clear(); IDX_FN.clear();
+  for (let i = 0; i < lines.length; i++) {
+    const p = lines[i].split('|');
+    if (p.length < 7) continue;
+    const acCode = p[3];
+    const idx = DB.length;
+    DB.push({
+      airline: p[0],
+      dep: p[1],
+      arr: p[2],
+      ac: acCode,
+      acLabel: AC_MAP[acCode] || acCode,
+      year: parseInt(p[4]),
+      season: p[5],
+      dur: parseFloat(p[6]),
+      fns: p[7] || '',
+      depTime: p[8] || '',
+      arrTime: p[9] || '',
+    });
+    // Build indexes inline — one pass instead of two
+    const r = DB[idx];
+    if (!IDX_DEP.has(r.dep)) IDX_DEP.set(r.dep, []);
+    IDX_DEP.get(r.dep).push(idx);
+    if (!IDX_ARR.has(r.arr)) IDX_ARR.set(r.arr, []);
+    IDX_ARR.get(r.arr).push(idx);
+    if (!IDX_AL.has(r.airline)) IDX_AL.set(r.airline, []);
+    IDX_AL.get(r.airline).push(idx);
+    if (r.fns) {
+      r.fns.split(',').forEach(fn => {
+        const key = (r.airline + fn.trim()).toUpperCase();
+        if (!IDX_FN.has(key)) IDX_FN.set(key, []);
+        IDX_FN.get(key).push(idx);
+      });
+    }
+  }
+  loadText.textContent = `Loaded ${DB.length.toLocaleString()} routes`;
+  await new Promise(r => setTimeout(r, 200));
+  document.getElementById('loading-overlay').style.display = 'none';
+  document.getElementById('load-status').textContent = DB.length.toLocaleString() + ' routes';
+  renderTable();
+}
+
+// ── UTILITY ──
+function pct(v, min, max) { return ((v-min)/(max-min)*100).toFixed(2)+'%'; }
+function formatDur(mins) {
+  const m = parseInt(mins) || 0;
+  const hrs = Math.floor(m / 60);
+  const rem = m % 60;
+  return hrs+'h'+(rem>0?' '+rem+'m':'');
+}
+function alName(code) { return AL_MAP[code] || code; }
+function apInfo(icao) { return AP_MAP[icao] || [icao,'','']; }
+
+// ── DUAL RANGE ──
+function setupDual(loId, hiId, loOutId, hiOutId, fillId, min, max, suffix) {
+  const lo = document.getElementById(loId), hi = document.getElementById(hiId);
+  function sync() {
+    let lv = parseInt(lo.value), hv = parseInt(hi.value);
+    if (lv > hv) { if (document.activeElement===lo) lo.value=hv; else hi.value=lv; }
+    lv = parseInt(lo.value); hv = parseInt(hi.value);
+    document.getElementById(loOutId).textContent = lv+(suffix||'');
+    document.getElementById(hiOutId).textContent = hv+(suffix||'');
+    document.getElementById(fillId).style.left = pct(lv,min,max);
+    document.getElementById(fillId).style.width = ((hv-lv)/(max-min)*100).toFixed(2)+'%';
+    queueRenderSlow();
+  }
+  lo.addEventListener('input', sync);
+  hi.addEventListener('input', sync);
+  sync();
+}
+
+// ── FILTERS ──
+// Quick search state — independent of filter UI
+let qs = { deps:[], arrs:[], airlines:[], acFamily:null, yearLo:null, yearHi:null, durHi:null };
+
+function getFilters() {
+  const deps = document.getElementById('dep').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  const arrs = document.getElementById('arr').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  const airlines = document.getElementById('airline-icao').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
+  return {
+    deps, arrs,
+    airlines,
+    airlineSet: new Set(airlines),
+    andor: document.querySelector('input[name=andor]:checked').value,
+    acFam: 'all',                          // legacy — not used anymore
+    acFamilies: [...selAcFamilies],        // array of selected family strings
+    excludedVariants: new Set(excludedVariants),
+    durLo: parseFloat(document.getElementById('dur-lo').value) * 60,
+    durHi: parseFloat(document.getElementById('dur-hi').value) * 60,
+    yrLo: parseInt(document.getElementById('yr-lo').value),
+    yrHi: parseInt(document.getElementById('yr-hi').value),
+    departsEnable: document.getElementById('departs-enable').checked,
+    departsLo: parseInt(document.getElementById('departs-lo').value) || 0,
+    departsHi: parseInt(document.getElementById('departs-hi').value) || 60,
+  };
+}
+
+function hasActiveFilters(fi) {
+  const sliderDefault = fi.durLo === 0 && fi.durHi === 22*60 && fi.yrLo === 1950 && fi.yrHi === 2024;
+  const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && !fi.departsEnable;
+  const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamily && qs.yearLo === null && qs.durHi === null;
+  return !(noManual && noQS);
+}
+
+function matchesFilters(f, fi) {
+  // Manual filters
+  if (fi.acFamilies.length) {
+    const label = f.acLabel || '';
+    // Values prefixed with "CEO:" match the base string but exclude Neo variants.
+    // Values prefixed with "NEO:" match only Neo variants of the base string.
+    const match = fi.acFamilies.some(fam => {
+      if (fam.startsWith('CEO:')) {
+        const base = fam.slice(4);
+        return label.includes(base) && !/neo/i.test(label);
+      }
+      if (fam.startsWith('NEO:')) {
+        const base = fam.slice(4);
+        return label.includes(base) && /neo/i.test(label);
+      }
+      if (fam.startsWith('747C:')) {
+        // Classic: -100, -200, -300, SP — exclude -400 and -8
+        return label.includes('Boeing 747') && !/747-[48]/.test(label) && !/747-8/.test(label);
+      }
+      if (fam.startsWith('747N:')) {
+        // NG: -400 and -8 variants
+        return label.includes('Boeing 747') && /747-[48]/.test(label);
+      }
+      return label.includes(fam);
+    });
+    if (!match) return false;
+  }
+  if (fi.excludedVariants.size && fi.excludedVariants.has(f.ac)) return false;
+  if (fi.airlineSet.size && !fi.airlineSet.has(f.airline)) return false;
+  if (f.dur < fi.durLo || f.dur > fi.durHi) return false;
+  if (f.year < fi.yrLo || f.year > fi.yrHi) return false;
+  if (fi.deps.length || fi.arrs.length) {
+    const dm = fi.deps.length===0 || fi.deps.some(d => f.dep.startsWith(d));
+    const am = fi.arrs.length===0 || fi.arrs.some(a => f.arr.startsWith(a));
+    if (fi.andor==='AND') { if (!dm || !am) return false; }
+    else { if (!dm && !am) return false; }
+  }
+  // Quick search state (independent)
+  if (qs.deps.length) { if (!qs.deps.some(d => f.dep === d)) return false; }
+  if (qs.arrs.length) { if (!qs.arrs.some(a => f.arr === a)) return false; }
+  if (qs.airlineSet && qs.airlineSet.size) { if (!qs.airlineSet.has(f.airline)) return false; }
+  if (qs.acFamily) { if (!(f.acLabel||'').includes(qs.acFamily)) return false; }
+  if (qs.yearLo !== null) { if (f.year < qs.yearLo || f.year > (qs.yearHi||qs.yearLo)) return false; }
+  if (qs.flightNum !== null) { const key=(f.airline+qs.flightNum).toUpperCase(); if (!f.fns || !f.fns.split(',').some(n=>(f.airline+n.trim()).toUpperCase()===key)) return false; }
+  if (qs.durHi !== null) { if (f.dur > qs.durHi) return false; }
+  // Departs in next X minutes (uses current UTC minutes-of-day)
+  if (fi.departsEnable && f.depTime) {
+    const now = new Date();
+    const nowMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const dt = parseInt(f.depTime.slice(0,2)) * 60 + parseInt(f.depTime.slice(2));
+    const diff = (dt - nowMins + 1440) % 1440;
+    if (diff < fi.departsLo || diff > fi.departsHi) return false;
+  }
+  return true;
+}
+
+function getSorted(arr) {
+  // Normalise: dur-asc/dur-desc -> col='dur', year-asc/year-desc -> col='year'
+  const col = sortCol.replace(/-(asc|desc)$/, '');
+  const cmp = (() => {
+    if (col === 'dur')  return (a,b) => a.dur  - b.dur;
+    if (col === 'year') return (a,b) => a.year - b.year;
+    return (a,b) => { const va=(a[col]||'').toString(), vb=(b[col]||'').toString(); return va<vb?-1:va>vb?1:0; };
+  })();
+  const dir = sortDir === 'desc' ? -1 : 1;
+  return arr.slice().sort((a,b) => dir * cmp(a,b));
+}
+
+
+// ── AIRCRAFT MULTI-SELECT LOGIC ──
+
+function acFamilyAdd(sel) {
+  const val = sel.value;
+  if (!val) return;
+  sel.value = '';
+  if (selAcFamilies.has(val)) return; // already added
+  selAcFamilies.add(val);
+  renderAcTags();
+  renderAcVariants();
+  queueRender();
+}
+
+function acFamilyRemove(val) {
+  selAcFamilies.delete(val);
+  // clean up any excluded variants that belonged to this family
+  const is747C = val.startsWith('747C:'), is747N = val.startsWith('747N:');
+  const base = (val.startsWith('CEO:') || val.startsWith('NEO:') || is747C || is747N) ? val.slice(val.indexOf(':')+1) : val;
+  const neoOnly = val.startsWith('NEO:');
+  const ceoOnly = val.startsWith('CEO:');
+  for (const code of [...excludedVariants]) {
+    const label = AC_MAP[code] || '';
+    if (!label.includes(base)) continue;
+    if (ceoOnly && /neo/i.test(label)) continue;
+    if (neoOnly && !/neo/i.test(label)) continue;
+    excludedVariants.delete(code);
+  }
+  renderAcTags();
+  renderAcVariants();
+  queueRender();
+}
+
+function acVariantToggle(code) {
+  if (excludedVariants.has(code)) excludedVariants.delete(code);
+  else excludedVariants.add(code);
+  // update chip style
+  const chip = document.querySelector(`.ac-variant[data-code="${code}"]`);
+  if (chip) chip.classList.toggle('excluded', excludedVariants.has(code));
+  updateVariantCount();
+  queueRender();
+}
+
+function renderAcTags() {
+  const wrap = document.getElementById('ac-family-tags');
+  wrap.innerHTML = [...selAcFamilies].map(fam => {
+    const opt = document.querySelector(`#ac-family-picker option[value="${fam.replace(/"/g,'&quot;')}"]`);
+    const label = opt ? opt.textContent : fam;
+    // encode fam for safe inline onclick
+    const safeFam = encodeURIComponent(fam);
+    return `<span class="ac-tag"><span>${label}</span><span class="ac-tag-x" title="Remove" onclick="acFamilyRemove(decodeURIComponent('${safeFam}'))">×</span></span>`;
+  }).join('');
+}
+
+function renderAcVariants() {
+  const panel = document.getElementById('ac-variant-panel');
+  const list  = document.getElementById('ac-variant-list');
+  if (!selAcFamilies.size) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  // Build variants from AC_MAP (fast — no DB scan needed)
+  const famsArr = [...selAcFamilies];
+  const variants = [];
+  for (const [code, label] of Object.entries(AC_MAP)) {
+    if (famsArr.some(fam => {
+      if (fam.startsWith('CEO:')) { const b=fam.slice(4); return label.includes(b) && !/neo/i.test(label); }
+      if (fam.startsWith('NEO:')) { const b=fam.slice(4); return label.includes(b) && /neo/i.test(label); }
+      if (fam.startsWith('747C:')) { return label.includes('Boeing 747') && !/747-[48]/.test(label); }
+      if (fam.startsWith('747N:')) { return label.includes('Boeing 747') && /747-[48]/.test(label); }
+      return label.includes(fam);
+    })) {
+      variants.push({ code, label });
+    }
+  }
+  variants.sort((a,b) => a.label.localeCompare(b.label));
+
+  list.innerHTML = variants.map(v => {
+    const excl = excludedVariants.has(v.code);
+    return `<span class="ac-variant${excl?' excluded':''}" data-code="${v.code}" onclick="acVariantToggle('${v.code}')" title="${v.code}">${v.label}</span>`;
+  }).join('');
+
+  updateVariantCount();
+}
+
+function updateVariantCount() {
+  const chips = document.querySelectorAll('.ac-variant');
+  const total = chips.length;
+  const excl  = excludedVariants.size;
+  const el = document.getElementById('ac-variant-count');
+  if (el) el.textContent = excl > 0 ? `${total - excl}/${total} active` : `${total} active`;
+}
+
+function queueRender(delay) {
+  if (!DB.length) return;
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(renderTable, delay || 80);
+}
+function queueRenderSlow() { queueRender(300); }  // for sliders
+
+function renderTable() {
+  if (!DB.length) return;
+  const fi = getFilters();
+
+  // Show empty state if no filters active
+  const wrap = document.getElementById('table-wrap');
+  if (!hasActiveFilters(fi)) {
+    document.getElementById('filter-note').innerHTML = `<span>${DB.length.toLocaleString()}</span> routes loaded`;
+    document.getElementById('bottombar-stats').innerHTML = '';
+    wrap.innerHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">✈</div>Enter filters or use Quick Search to find routes</div>';
+    return;
+  }
+
+  // Use indexes for dep/arr/airline to avoid full scan when possible
+  let candidates = null;
+
+  const useDepIdx = fi.deps.length > 0;
+  const useArrIdx = fi.arrs.length > 0;
+  const useAlIdx  = fi.airlineSet.size > 0;
+
+  if (useDepIdx || useArrIdx || useAlIdx) {
+    let sets = [];
+    if (useDepIdx) {
+      const s = new Set();
+      fi.deps.forEach(d => (IDX_DEP.get(d)||[]).forEach(i => s.add(i)));
+      sets.push({s, role:'dep'});
+    }
+    if (useArrIdx) {
+      const s = new Set();
+      fi.arrs.forEach(a => (IDX_ARR.get(a)||[]).forEach(i => s.add(i)));
+      sets.push({s, role:'arr'});
+    }
+    if (useAlIdx) {
+      const s = new Set();
+      fi.airlineSet.forEach(a => (IDX_AL.get(a)||[]).forEach(i => s.add(i)));
+      sets.push({s, role:'al'});
+    }
+
+    if (fi.andor === 'AND' && useDepIdx && useArrIdx) {
+      // Intersect dep and arr sets
+      const depSet = sets.find(x=>x.role==='dep').s;
+      const arrSet = sets.find(x=>x.role==='arr').s;
+      const intersection = new Set();
+      depSet.forEach(i => { if (arrSet.has(i)) intersection.add(i); });
+      let result = intersection;
+      if (useAlIdx) {
+        const alSet = sets.find(x=>x.role==='al').s;
+        const inter2 = new Set();
+        result.forEach(i => { if (alSet.has(i)) inter2.add(i); });
+        result = inter2;
+      }
+      candidates = [...result].map(i => DB[i]);
+    } else {
+      // Union (OR) or only one index active
+      const union = new Set();
+      sets.forEach(({s}) => s.forEach(i => union.add(i)));
+      candidates = [...union].map(i => DB[i]);
+    }
+  } else {
+    candidates = DB;
+  }
+
+  // Apply remaining filters (year, duration, acFam, qs, departs)
+  const filtered = candidates.filter(f => matchesFilters(f, fi));
+
+  const shown = getSorted(filtered);
+  const more = 0;
+
+  document.getElementById('filter-note').innerHTML =
+    `<span>${filtered.length.toLocaleString()}</span> shown · <span>${(DB.length - filtered.length).toLocaleString()}</span> filtered`;
+
+  // Compute stats in one pass
+  const _als = new Set(), _pairs = new Set();
+  for (const r of filtered) { _als.add(r.airline); _pairs.add(r.dep+r.arr); }
+  document.getElementById('bottombar-stats').innerHTML =
+    `<span>${filtered.length.toLocaleString()}</span> routes · ` +
+    `<span>${_als.size}</span> airlines · ` +
+    `<span>${_pairs.size.toLocaleString()}</span> city pairs`;
+
+  ['airline','dep','arr','ac','dur','year'].forEach(c => {
+    const el = document.getElementById('th-'+c);
+    const activeCol = sortCol.replace(/-(asc|desc)$/, '');
+    if (el) el.className = 'th' + (activeCol===c ? ' '+(sortDir==='asc'?'asc':'desc') : '');
+  });
+
+  if (!shown.length) {
+    wrap.innerHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">∅</div>No routes match the current filters.</div>';
+    return;
+  }
+
+  mountVScroll(wrap, shown, more);
+}
+
+
+// ── VIRTUAL SCROLLER ──────────────────────────────────────────────────────
+const ROW_H = 44;   // px — must match .tr height
+let vsRows = [];    // current sorted filtered rows
+let vsScrollListener = null;
+
+function rowHTML(f) {
+  const apDep = AP_MAP[f.dep];
+  const apArr = AP_MAP[f.arr];
+  const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,14) : f.dep;
+  const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,14) : f.arr;
+  const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
+                   selRoute.airline===f.airline && selRoute.ac===f.ac;
+  const seasonBadge = f.season==='S' ? '<span class="badge badge-s">SUMMER</span>'
+                    : f.season==='W' ? '<span class="badge badge-w">WINTER</span>' : '';
+  const cargoBadge = (f.acLabel||'').match(/freight|cargo|freighter|combi/i) ? '<span class="badge badge-cargo">CARGO</span>' : '';
+  const fnNums = f.fns ? f.fns.split(',').map(n => f.airline+n).join(', ') : '';
+  const depTimeStr = f.depTime ? f.depTime.slice(0,2)+':'+f.depTime.slice(2) : '';
+  const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
+  return `<div class="tr${isActive?' active':''}" style="position:absolute;left:0;right:0;height:${ROW_H}px;">
+    <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
+    <div class="td td-mono">${f.dep}<div class="td-sub">${depCity}</div></div>
+    <div class="td td-mono">${f.arr}<div class="td-sub">${arrCity}</div></div>
+    <div class="td">${f.acLabel.substring(0,22)} ${cargoBadge}<div class="td-sub td-mono">${f.ac}</div></div>
+    <div class="td td-mono">${depTimeStr ? depTimeStr+'<span style="opacity:.5;"> → </span>'+arrTimeStr : ''}</div>
+    <div class="td td-mono">${formatDur(f.dur)}</div>
+    <div class="td td-mono">${f.year} ${seasonBadge}</div>
+  </div>`;
+}
+
+function mountVScroll(wrap, rows, more) {
+  vsRows = rows;
+  // Remove old scroll listener
+  if (vsScrollListener) { wrap.removeEventListener('scroll', vsScrollListener); vsScrollListener = null; }
+
+  const totalH = rows.length * ROW_H;
+  wrap.innerHTML = `<div class="vscroll-sizer" style="height:${totalH}px;"><div class="vscroll-window" id="vs-window"></div></div>`;
+
+  const sizer = wrap.querySelector('.vscroll-sizer');
+  const win   = wrap.querySelector('#vs-window');
+  const OVERSCAN = 5;
+
+  function paint() {
+    const scrollTop = wrap.scrollTop;
+    const viewH = wrap.clientHeight;
+    const firstIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+    const lastIdx  = Math.min(rows.length - 1, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
+    let html = '';
+    for (let i = firstIdx; i <= lastIdx; i++) {
+      const top = i * ROW_H;
+      html += rowHTML(rows[i]).replace('style="position:absolute', `style="position:absolute;top:${top}px`);
+    }
+    win.innerHTML = html;
+    win.querySelectorAll('.tr').forEach((el, j) => {
+      el.onclick = () => selectRoute(rows[firstIdx + j]);
+    });
+  }
+
+  vsScrollListener = paint;
+  wrap.addEventListener('scroll', vsScrollListener, { passive: true });
+  paint();
+}
+
+function vsRepaint() {
+  const wrap = document.getElementById('table-wrap');
+  if (vsRows.length && wrap.querySelector('.vscroll-sizer')) mountVScroll(wrap, vsRows, 0);
+}
+
+
+// ── SIMBRIEF INTEGRATION ─────────────────────────────────────────────────
+const AC_TO_SB = {
+  'ATR':'AT72','CRJ':'CRJ9','CRA':'CRJ9','DHT':'DH8D','DH1':'DH8A','DH2':'DH8B',
+  'DH8C':'DH8C','DH8D':'DH8D','SB20':'SB20','SF34':'SF34','AR1':'RJ1H','AR8':'RJ85',
+  'RJ100':'RJ1H','RJ85':'RJ85','RJ70':'RJ70','F100':'F100','F70':'F70','F50':'F50',
+  'F28':'F28','AB6':'A306','AB4':'A30B','B461':'B461','B143':'B463',
+  'BAE1':'B461','BAE2':'B462','BAE3':'B463','A40':'A346','A58':'A359','A81':'A318',
+  'MD80':'MD82','MD90':'MD90','DC9':'DC93','B77W':'B77W','B77L':'B772',
+  'B764':'B764','B763':'B763','B762':'B762',
+  '747':'B744','757':'B752','767':'B763','777':'B773','787':'B789',
+  '73Q':'B732','74M':'B741','T134':'T134','T154':'T154','T20':'T204',
+  'IL62':'IL62','IL76MD':'IL76','IL76TD':'IL76','IL96':'IL96','IL18D':'IL18','IL18V':'IL18',
+  'AN24':'AN24','AN26':'AN26','YK42':'YK42','YK40':'YK40',
+  'BE1':'B190','BH2':'B190','BEH':'B190','SWM':'SW4','CNC':'C208','CNA':'C172',
+  'PAG':'PC12','PL2':'PC12','SSJ':'SU95','SU9':'SU95','FRJ':'D328',
+  'L4T':'L410','EMB':'E120','EM2':'E120','ERD':'E145','EMJ':'E145',
+  'D38':'D328','D328J':'D328','J32':'JS32','BNI':'BN2P','BNT':'BN2T',
+  'A221':'A221','A223':'A223','A306':'A306','A310':'A310','A312':'A312','A313':'A313',
+  'A318':'A318','A3181':'A318','A3191':'A319','A319N':'A19N','A319CJ':'A19X',
+  'A3201':'A320','A3202':'A320','A320N':'A20N',
+  'A3211':'A321','A3212':'A321','A321N':'A21N','A321NLR':'A21N',
+  'A332':'A332','A332F':'A332','A333':'A333','A338':'A338','A339':'A339',
+  'A342':'A342','A343':'A343','A345':'A345','A346':'A346',
+  'A351':'A35K','A359':'A359','A388':'A388',
+  'B701':'B701','B702':'B702','B703':'B703','B704':'B704','B712':'B712','B720':'B720',
+  'B721':'B721','B722':'B722','B722A':'B722','B731':'B731','B732':'B732',
+  'B733':'B733','B734':'B734','B735':'B735','B736':'B736','B737':'B737',
+  'B737ER':'B737','B738':'B738','B739':'B739','B739ER':'B739',
+  'B737M8':'B38M','B737M9':'B39M','B741':'B741','B742':'B742','B743':'B743',
+  'B744':'B744','B748':'B748','B747SP':'B741','B747SR':'B741',
+  'B752':'B752','B753':'B753','B762':'B762','B762ER':'B762','B763':'B763',
+  'B763ER':'B763','B764':'B764','B764ER':'B764','B772':'B772','B772ER':'B772',
+  'B772LR':'B772','B773':'B773','B773ER':'B77W','B781':'B781','B788':'B788','B789':'B789',
+  'CRJ1':'CRJ1','CRJ2':'CRJ2','CRJ5':'CRJ5','CRJ7':'CRJ7','CRJ9':'CRJ9','CRJ10':'CRJX',
+  'DHC81':'DH8A','DHC82':'DH8B','DHC83':'DH8C','DHC84':'DH8D',
+  'E110':'E110','E120':'E120','E135':'E135','E140':'E140','E145':'E145',
+  'E170':'E170','E175':'E175','E190':'E190','E195':'E195','E190E2':'E290','E195E2':'E295',
+  'FK100':'F100','FK50':'F50','FK70':'F70','IL86':'IL86',
+  'MD11':'MD11','MD11F':'MD11','MD81':'MD81','MD82':'MD82','MD83':'MD83',
+  'MD87':'MD87','MD88':'MD88','DC85':'DC85','DC86':'DC86','DC87':'DC87',
+  'DC91':'DC91','DC92':'DC92','DC93':'DC93','DC94':'DC94','DC95':'DC95',
+  'DC101':'DC10','DC103':'DC10','DC104':'DC10',
+  'L10111':'L101','L10110':'L101','L10112':'L101','L10113':'L101','L10115':'L101',
+  'CONC':'CONC','AT43':'AT43','AT45':'AT45','AT72':'AT72','AT75':'AT75','AT76':'AT76',
+  'S340A':'SF34','S340B':'SF34','AT721':'AT72','AT722':'AT72','AT725':'AT75','AT726':'AT76',
+  'TU134A':'T134','TU154B':'T154','TU154M':'T154','TU2041':'T204','TU214':'T214',
+};
+
+function openSimbrief(f) {
+  const sb = AC_TO_SB[f.ac] || f.ac;
+  const fltnum = f.fns ? f.fns.split(',')[0].trim() : '';
+
+  const params = new URLSearchParams();
+  params.set('orig',    f.dep);
+  params.set('dest',    f.arr);
+  params.set('type',    sb);
+  params.set('airline', f.airline);
+  if (fltnum)  params.set('fltnum', fltnum);
+  params.set('find_sidstar', '1');
+  params.set('navlog',       '1');
+
+  window.open('https://dispatch.simbrief.com/options/custom?' + params.toString(), '_blank');
+}
+
+function selectRoute(f) {
+  // clicking the already-selected route deselects it
+  if (selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
+      selRoute.airline===f.airline && selRoute.ac===f.ac) {
+    selRoute = null;
+    selFlightIdx = null;
+    document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
+    renderTable();
+    return;
+  }
+  selRoute = f;
+  selFlightIdx = 0;
+  showDetail(f);
+  renderTable();
+}
+
+function showDetail(f) {
+  const depA = AP_MAP[f.dep] || [f.dep,'',''];
+  const arrA = AP_MAP[f.arr] || [f.arr,'',''];
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-title">${AL_MAP[f.airline]||f.airline} (${f.airline}) · ${f.year} ${f.season==='S'?'Summer':f.season==='W'?'Winter':''}</div>
+    <div class="detail-route">
+      <div><div class="dr-icao">${f.dep}</div><div class="dr-name">${(depA[0]||'').substring(0,28)}</div><div class="dr-name">${depA[1]||''}</div></div>
+      <div class="dr-arrow">→</div>
+      <div><div class="dr-icao">${f.arr}</div><div class="dr-name">${(arrA[0]||'').substring(0,28)}</div><div class="dr-name">${arrA[1]||''}</div></div>
+    </div>
+    <div class="detail-grid">
+      <div class="dfield"><div class="dfield-label">Aircraft</div><div class="dfield-val td-mono">${f.ac}</div><div class="dfield-sub">${f.acLabel}</div></div>
+      <div class="dfield"><div class="dfield-label">Block time</div><div class="dfield-val">${formatDur(f.dur)}</div></div>
+      <div class="dfield"><div class="dfield-label">Year · Season</div><div class="dfield-val">${f.year} · ${f.season==='S'?'Summer':f.season==='W'?'Winter':'Other'}</div></div>
+      <div class="dfield"><div class="dfield-label">Sched dep / arr</div><div class="dfield-val td-mono">${(f.depTime && f.arrTime) ? f.depTime.slice(0,2)+':'+f.depTime.slice(2)+' → '+f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '—'}</div></div>
+      ${f.fns ? `<div class="dfield" style="grid-column:1/-1"><div class="dfield-label">Flight number(s)</div><div class="dfield-val td-mono" style="white-space:normal;word-break:break-word;font-size:11px;">${f.fns.split(',').map(n=>f.airline+n).join('  ·  ')}</div></div>` : ''}
+    </div>
+    <button class="simbrief-btn" onclick="openSimbrief(selRoute)"><i class="sb-icon ti ti-external-link" aria-hidden="true"></i> Send to Simbrief</button>
+  `;
+}
+
+// ── SORT ──
+function positionSortIndicator() {
+  const seg = document.getElementById('sort-seg');
+  const ind = document.getElementById('sort-indicator');
+  const active = seg ? seg.querySelector('.sort-seg-btn.active') : null;
+  if (!active || !ind) return;
+  ind.style.left  = active.offsetLeft + 'px';
+  ind.style.width = active.offsetWidth + 'px';
+}
+
+function setSortSeg(btn) {
+  const seg = document.getElementById('sort-seg');
+  const sortKey = btn.dataset.sort;
+  // Toggle direction if same column
+  const wasActive = btn.classList.contains('active');
+  seg.querySelectorAll('.sort-seg-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  positionSortIndicator();
+  if (wasActive) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortCol = sortKey;
+    sortDir = (sortKey === 'dur' || sortKey === 'year') ? 'asc' : 'asc';
+  }
+  sortCol = sortKey;
+  // Update direction arrow — only touch the span, not the button text
+  seg.querySelectorAll('.sort-seg-btn').forEach(b => {
+    const sp = b.querySelector('.seg-arrow');
+    if (sp) sp.textContent = '';
+  });
+  const activeSpan = btn.querySelector('.seg-arrow');
+  if (activeSpan) activeSpan.textContent = sortDir === 'asc' ? ' ↑' : ' ↓';
+  // Keep hidden select in sync
+  const selVal = (sortKey === 'dur' || sortKey === 'year') ? sortKey + '-' + sortDir : sortKey;
+  const sel = document.getElementById('sort-sel');
+  if (sel) sel.value = selVal;
+  // Update column header highlights
+  ['airline','dep','arr','ac','dur','year'].forEach(c => {
+    const el = document.getElementById('th-'+c);
+    if (el) el.className = 'th' + (c === sortKey ? ' '+(sortDir==='asc'?'asc':'desc') : '');
+  });
+  queueRender();
+}
+
+function setSort(v) {
+  if (sortCol===v) { sortDir = sortDir==='asc'?'desc':'asc'; }
+  else { sortCol=v; sortDir=v.endsWith('desc')?'desc':'asc'; }
+  // Sync dropdown: for dur/year use the asc/desc variant option;
+  // for simple cols update the option label to show direction arrow
+  const sel = document.getElementById('sort-sel');
+  const col = v.replace(/-(asc|desc)$/, '');
+  if (col === 'dur' || col === 'year') {
+    sel.value = col + '-' + sortDir;
+  } else {
+    sel.value = col;
+    // Update option text to show arrow
+    Array.from(sel.options).forEach(o => {
+      o.text = o.text.replace(/ [↑↓]$/, '');
+      if (o.value === col) o.text += sortDir === 'asc' ? ' ↑' : ' ↓';
+    });
+  }
+  queueRender();
+}
+
+// ── RANDOM ──
+function randomFlight() {
+  if (!DB.length) return;
+  const fi = getFilters();
+  const filtered = DB.filter(f => matchesFilters(f, fi));
+  if (!filtered.length) return;
+  selectRoute(filtered[Math.floor(Math.random()*filtered.length)]);
+}
+
+// ── RESET ──
+function toggleAirportFields() {
+  const on = document.getElementById('specify-airport').checked;
+  document.getElementById('airport-fields').style.display = on ? '' : 'none';
+  if (!on) { document.getElementById('dep').value=''; document.getElementById('arr').value=''; }
+  queueRender();
+}
+function toggleAirlineField() {} // removed - airline field always visible
+function resetAll() {
+  document.getElementById('dep').value='';
+  document.getElementById('arr').value='';
+  document.getElementById('airline-icao').value='';
+  selAcFamilies.clear();
+  excludedVariants.clear();
+  renderAcTags();
+  renderAcVariants();
+  document.getElementById('ac-family-picker').value='';
+  document.getElementById('dur-lo').value=0;
+  document.getElementById('dur-hi').value=22;
+  document.getElementById('yr-lo').value=1950;
+  document.getElementById('yr-hi').value=2024;
+  document.getElementById('specify-airport').checked=true;
+  document.getElementById('airport-fields').style.display='';
+  document.getElementById('departs-enable').checked=false;
+  document.getElementById('departs-lo').value=45;
+  document.getElementById('departs-hi').value=60;
+  document.getElementById('pax').checked=true;
+  document.getElementById('cargo').checked=true;
+  document.querySelectorAll('input[name=andor]')[0].checked=true;
+  document.getElementById('smart-input').value='';
+  document.getElementById('smart-tokens').innerHTML='';
+  document.getElementById('smart-hint').textContent='ICAO · city · airline · aircraft · decade';
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+  history.replaceState(null,'','#');
+  setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
+  setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
+  selRoute=null; selFlightIdx=null;
+  queueRender();
+  document.getElementById('detail-panel').innerHTML='<div class="detail-empty">Select a flight to view route details</div>';
+}
+
+// ── SMART SEARCH ──
+let ICAO_AP_SET = new Set(Object.keys(AP_MAP));
+let ICAO_AL_SET = new Set(Object.keys(AL_MAP));
+
+
+const AC_ALIASES = {
+  '741':['Boeing 747-100'],'742':['Boeing 747-200'],'743':['Boeing 747-300'],'744':['Boeing 747-400'],
+  '748':['Boeing 747-8'],'74s':['Boeing 747SP'],'747':['Boeing 747'],
+  'b747':['Boeing 747'],'b742':['Boeing 747-200'],'b741':['Boeing 747-100'],'b744':['Boeing 747-400'],
+  '721':['Boeing 727'],'722':['Boeing 727'],'727':['Boeing 727'],'b727':['Boeing 727'],
+  '737':['Boeing 737'],'b737':['Boeing 737'],'b738':['Boeing 737-800'],
+  '737ng':['Boeing 737-'],'737max':['Boeing 737 MAX'],'737classic':['Boeing 737-3'],
+  '707':['Boeing 707'],'720':['Boeing 720'],
+  '752':['Boeing 757'],'753':['Boeing 757'],'757':['Boeing 757'],
+  '767':['Boeing 767'],'763':['Boeing 767'],'762':['Boeing 767'],
+  '777':['Boeing 777'],'77w':['Boeing 777'],'772':['Boeing 777'],
+  '787':['Boeing 787'],'788':['Boeing 787'],'789':['Boeing 787'],
+  'dc8':['Douglas DC-8'],'dc9':['Douglas DC-9'],'dc10':['Douglas DC-10'],
+  'md11':['McDonnell Douglas MD-11'],'md80':['McDonnell Douglas MD-8'],
+  'l1011':['Lockheed L-1011'],'tristar':['Lockheed L-1011'],
+  'a320':['Airbus A320'],'a319':['Airbus A319'],'a321':['Airbus A321'],
+  'a32x':['Airbus A32'],'a330':['Airbus A330'],'a340':['Airbus A340'],
+  'a350':['Airbus A350'],'a380':['Airbus A380'],
+  'concorde':['Concorde'],
+};
+
+const AIRLINE_ALIASES = {
+  'panam':['PAA'],'pan am':['PAA'],'pan american':['PAA'],
+  'twa':['TWA'],'trans world':['TWA'],
+  'british airways':['BAW'],'british':['BAW'],
+  'lufthansa':['DLH'],
+  'american airlines':['AAL'],'american':['AAL'],
+  'united airlines':['UAL'],'united':['UAL'],
+  'delta':['DAL'],'delta air lines':['DAL'],
+  'southwest':['SWA'],'southwest airlines':['SWA'],
+  'eastern':['EAL'],'braniff':['BNF'],
+  'northwest':['NWA'],'northwest orient':['NWA'],
+  'singapore airlines':['SIA'],'singapore':['SIA'],
+  'qantas':['QFA'],
+  'japan air':['JAL'],'jal':['JAL'],
+  'korean air':['KAL'],
+  'emirates':['UAE'],
+  'air france':['AFR'],
+  'klm':['KLM'],
+  'fedex':['FDX'],
+  'ryanair':['RYR'],
+  'easyjet':['EZY'],
+  'turkish airlines':['THY'],'turkish':['THY'],
+  'iberia':['IBE'],
+  'air canada':['ACA'],
+  'air china':['CCA'],
+  'china southern':['CSN'],
+  'china eastern':['CES'],
+};
+
+const DECADE_MAP = {
+  '1950s':[1950,1959],'50s':[1950,1959],
+  '1960s':[1960,1969],'60s':[1960,1969],
+  '1970s':[1970,1979],'70s':[1970,1979],
+  '1980s':[1980,1989],'80s':[1980,1989],
+  '1990s':[1990,1999],'90s':[1990,1999],
+  '2000s':[2000,2009],'2010s':[2010,2019],'2020s':[2020,2024],
+};
+
+function resolveAirport(token) {
+  // Quick search matches airports by ICAO only (e.g. KDFW, not DFW). IATA codes are
+  // intentionally not resolved here: many 3-letter IATA codes collide with airline ICAO
+  // codes (e.g. DAL = Delta / Dallas Love), so requiring ICAO keeps tokens unambiguous.
+  const up = token.toUpperCase();
+  if (ICAO_AP_SET.has(up)) return up;
+  if (CITY_MAP[token.toLowerCase()]) return CITY_MAP[token.toLowerCase()];
+  return null;
+}
+
+
+function removeToken(type, value) {
+  if (type === 'dep')     qs.deps     = qs.deps.filter(x => x !== value);
+  if (type === 'arr')     qs.arrs     = qs.arrs.filter(x => x !== value);
+  if (type === 'airline') { qs.airlines = qs.airlines.filter(x => x !== value); qs.airlineSet.delete(value); }
+  if (type === 'ac')      qs.acFamily  = null;
+  if (type === 'year')    { qs.yearLo = null; qs.yearHi = null; }
+  if (type === 'dur')     qs.durHi    = null;
+  if (type === 'flt')     qs.flightNum = null;
+  // Rebuild tokens display
+  const tokensEl = document.getElementById('smart-tokens');
+  const hintEl   = document.getElementById('smart-hint');
+  const active = [
+    ...qs.deps.map(d => ({type:'dep',value:d,label:`DEP: ${d}`})),
+    ...qs.arrs.map(a => ({type:'arr',value:a,label:`ARR: ${a}`})),
+    ...qs.airlines.map(a => ({type:'airline',value:a,label:AL_MAP[a]||a})),
+    ...(qs.acFamily ? [{type:'ac',value:qs.acFamily,label:`AC: ${qs.acFamily}`}] : []),
+    ...(qs.yearLo!==null ? [{type:'year',value:'year',label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`}] : []),
+    ...(qs.durHi!==null  ? [{type:'dur',value:'dur',label:`≤${qs.durHi}h`}] : []),
+    ...(qs.flightNum!==null ? [{type:'flt',value:'flt',label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`}] : []),
+  ];
+  const clsMap = {dep:'token-dep',arr:'token-arr',airline:'token-airline',ac:'token-ac',year:'token-year',dur:'token-dur',flt:'token-airline'};
+  if (active.length) {
+    tokensEl.innerHTML = active.map(t =>
+      `<span class="token ${clsMap[t.type]}" onclick="removeToken('${t.type}','${t.value}')" title="Click to remove" style="cursor:pointer;">
+        ${t.label} <span style="opacity:.5;font-size:9px;">✕</span>
+      </span>`
+    ).join('');
+    hintEl.textContent = active.length + ' filter' + (active.length!==1?'s':'') + ' active';
+  } else {
+    tokensEl.innerHTML = '';
+    hintEl.textContent = 'ICAO · city · airline · aircraft · decade';
+  }
+  encodeState();
+  queueRender();
+}
+
+function parseSmartSearch() {
+  const raw = document.getElementById('smart-input').value.trim();
+  const tokensEl = document.getElementById('smart-tokens');
+  const hintEl = document.getElementById('smart-hint');
+
+  if (!raw) {
+    qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+    tokensEl.innerHTML = '';
+    hintEl.textContent = 'ICAO · city · airline · aircraft · decade';
+    encodeState();
+    queueRender();
+    return;
+  }
+  tokensEl.innerHTML = '';
+
+  const lower = raw.toLowerCase();
+  const words = lower.split(/[\s,]+/).filter(Boolean);
+  const upper = raw.toUpperCase().split(/[\s,]+/).filter(Boolean);
+
+  // Reset quick search state - DON'T touch filter UI
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+
+  // Multi-word airline aliases
+  for (const [alias, codes] of Object.entries(AIRLINE_ALIASES)) {
+    if (lower.includes(alias)) codes.forEach(c => { if (!qs.airlines.includes(c)) { qs.airlines.push(c); qs.airlineSet.add(c); } });
+  }
+
+  // Decade patterns
+  for (const [dec, range] of Object.entries(DECADE_MAP)) {
+    if (lower.includes(dec)) { qs.yearLo=range[0]; qs.yearHi=range[1]; }
+  }
+
+  // Token-by-token
+  const addAirline = code => { if (!qs.airlines.includes(code)) { qs.airlines.push(code); qs.airlineSet.add(code); } };
+  words.forEach((w, i) => {
+    const tok = (upper[i] || w.toUpperCase());
+    // Airport resolution: ICAO (4-letter) or city name only — IATA is not recognized.
+    const apResolved = resolveAirport(tok);
+    if (apResolved) {
+      if (!qs.deps.length && !qs.arrs.length) qs.deps.push(apResolved);
+      else if (!qs.arrs.length) qs.arrs.push(apResolved);
+      else qs.arrs.push(apResolved);
+      return;
+    }
+    // 3-letter airline ICAO. With IATA airport matching removed, a 3-letter token is
+    // unambiguous: if it's a known airline code, it's the airline (e.g. DAL -> Delta).
+    if ((tok.length === 2 || tok.length === 3) && ICAO_AL_SET.has(tok)) {
+      addAirline(tok);
+      return;
+    }
+    // Aircraft aliases
+    const acMatch = AC_ALIASES[w];
+    if (acMatch) { qs.acFamily = acMatch[0]; return; }
+    // Duration
+    if (/^(\d+)h$/.test(w)) { qs.durHi=parseInt(w); return; }
+    if (w==='short') { qs.durHi=3; return; }
+    if (w==='long') { qs.durHi=22; return; }
+    // Exact year
+    if (/^\d{4}$/.test(w)) {
+      const y=parseInt(w);
+      if (y>=1950&&y<=2024) {
+        if (qs.yearLo===null) { qs.yearLo=y; qs.yearHi=y; }
+        else { qs.yearLo=Math.min(qs.yearLo,y); qs.yearHi=Math.max(qs.yearHi,y); }
+      }
+      return;
+    }
+    // Flight number: e.g. AA100, AAL100, AAL2416, 2416 (bare number used with airline already set)
+    if (/^[A-Z]{2,3}\d{1,5}$/i.test(w)) {
+      // e.g. AAL2416 or AA100
+      const m = w.match(/^([A-Z]{2,3})(\d{1,5})$/i);
+      if (m) {
+        const possibleAl = m[1].toUpperCase();
+        const num = m[2];
+        if (ICAO_AL_SET.has(possibleAl) || possibleAl.length===2) {
+          if (ICAO_AL_SET.has(possibleAl)) addAirline(possibleAl);
+          qs.flightNum = num;
+          return;
+        }
+      }
+    }
+    if (/^\d{1,5}$/.test(w) && qs.airlines.length) { qs.flightNum = w; return; }
+    // Try 2-word city
+    if (i < words.length-1) {
+      const twoWord = words[i]+' '+words[i+1];
+      const resolved = CITY_MAP[twoWord];
+      if (resolved) {
+        if (!qs.deps.length && !qs.arrs.length) qs.deps.push(resolved);
+        else if (!qs.arrs.length) qs.arrs.push(resolved);
+        return;
+      }
+    }
+  });
+
+  // Show token pills
+  const pills = [
+    ...qs.deps.map(d => {const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}}),
+    ...qs.arrs.map(a => {const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}}),
+    ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
+    ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
+    ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
+    ...(qs.durHi!==null ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
+    ...(qs.flightNum!==null ? [{label:`FLT: ${qs.airlines.length?qs.airlines[0]:''}${qs.flightNum}`,cls:'token-airline'}] : []),
+  ];
+
+  // Build pills data with removal type info
+  const pillsData = [
+    ...qs.deps.map(d => ({type:'dep',value:d,cls:'token-dep',label:`DEP: ${d}${AP_MAP[d]?' ('+AP_MAP[d][1]+')':''}`})),
+    ...qs.arrs.map(a => ({type:'arr',value:a,cls:'token-arr',label:`ARR: ${a}${AP_MAP[a]?' ('+AP_MAP[a][1]+')':''}`})),
+    ...qs.airlines.map(a => ({type:'airline',value:a,cls:'token-airline',label:AL_MAP[a]||a})),
+    ...(qs.acFamily ? [{type:'ac',value:qs.acFamily,cls:'token-ac',label:`AC: ${qs.acFamily}`}] : []),
+    ...(qs.yearLo!==null ? [{type:'year',value:'year',cls:'token-year',label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`}] : []),
+    ...(qs.durHi!==null  ? [{type:'dur',value:'dur',cls:'token-dur',label:`≤${qs.durHi}h`}] : []),
+    ...(qs.flightNum!==null ? [{type:'flt',value:'flt',cls:'token-airline',label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`}] : []),
+  ];
+  if (pillsData.length) {
+    tokensEl.innerHTML = pillsData.map(p =>
+      `<span class="token ${p.cls}" onclick="removeToken('${p.type}','${p.value.replace(/'/g,"\\'")}')" title="Click to remove" style="cursor:pointer;">
+        ${p.label} <span style="opacity:.5;font-size:9px;">✕</span>
+      </span>`
+    ).join('');
+    hintEl.textContent = pillsData.length+' filter'+(pillsData.length!==1?'s':'')+' active';
+  } else {
+    hintEl.textContent = 'No tokens recognized — try ICAO (e.g. KDFW), city, airline code, aircraft, decade';
+  }
+  encodeState();
+  queueRender();
+}
+
+document.getElementById('smart-input').addEventListener('keydown', e => {
+  if (e.key==='Enter') parseSmartSearch();
+});
+
+// Arrow key navigation through results
+document.addEventListener('keydown', e => {
+  if (!vsRows.length) return;
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  // Only fire if focus is not in an input/select
+  if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  e.preventDefault();
+  const cur = selRoute ? vsRows.findIndex(r =>
+    r.dep===selRoute.dep && r.arr===selRoute.arr &&
+    r.airline===selRoute.airline && r.ac===selRoute.ac) : -1;
+  const next = e.key==='ArrowDown'
+    ? Math.min(vsRows.length-1, cur+1)
+    : Math.max(0, cur === -1 ? 0 : cur-1);
+  selectRoute(vsRows[next]);
+  // Scroll selected row into view
+  const wrap = document.getElementById('table-wrap');
+  const top = next * ROW_H;
+  if (top < wrap.scrollTop) wrap.scrollTop = top;
+  else if (top + ROW_H > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = top + ROW_H - wrap.clientHeight;
+});
+
+// Note: dep/arr/airline-icao already have oninput=queueRender() in HTML — no duplicate listener needed
+document.querySelectorAll('input[name=andor]').forEach(r => r.addEventListener('change', queueRender));
+
+// ── INIT ──
+setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
+setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
+
+// ── URL HASH STATE ────────────────────────────────────────────────────────
+function encodeState() {
+  const parts = [];
+  if (qs.deps.length)    parts.push('d=' + qs.deps.join(','));
+  if (qs.arrs.length)    parts.push('a=' + qs.arrs.join(','));
+  if (qs.airlines.length) parts.push('al=' + qs.airlines.join(','));
+  if (qs.acFamily)       parts.push('ac=' + encodeURIComponent(qs.acFamily));
+  if (qs.yearLo !== null) parts.push('y=' + qs.yearLo + '-' + qs.yearHi);
+  if (qs.durHi !== null)  parts.push('dur=' + qs.durHi);
+  const hash = parts.length ? '#' + parts.join('&') : '#';
+  history.replaceState(null, '', hash);
+}
+
+function decodeState() {
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+  const params = {};
+  hash.split('&').forEach(p => { const [k,v] = p.split('='); if(k&&v) params[k]=v; });
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+  if (params.d)  { qs.deps    = params.d.split(',').filter(Boolean); }
+  if (params.a)  { qs.arrs    = params.a.split(',').filter(Boolean); }
+  if (params.al) { qs.airlines = params.al.split(',').filter(Boolean); qs.airlineSet = new Set(qs.airlines); }
+  if (params.ac) { qs.acFamily = decodeURIComponent(params.ac); }
+  if (params.y)  { const [lo,hi]=params.y.split('-'); qs.yearLo=parseInt(lo); qs.yearHi=parseInt(hi); }
+  if (params.dur){ qs.durHi = parseInt(params.dur); }
+
+  // Populate the search box display
+  const pills = [
+    ...qs.deps.map(d  => { const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}; }),
+    ...qs.arrs.map(a  => { const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}; }),
+    ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
+    ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
+    ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
+    ...(qs.durHi!==null  ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
+  ];
+  if (pills.length) {
+    document.getElementById('smart-tokens').innerHTML = pills.map(p=>`<span class="token ${p.cls}">${p.label}</span>`).join('');
+    document.getElementById('smart-hint').textContent = pills.length+' filter'+(pills.length!==1?'s':'')+' active (from URL)';
+  }
+  queueRender();
+}
+
+window.addEventListener('load', () => { loadData().then(() => { decodeState(); setTimeout(positionSortIndicator, 50); }); });
+window.addEventListener('resize', positionSortIndicator);
+</script>
+</body>
+</html>
