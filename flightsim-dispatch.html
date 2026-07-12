@@ -729,7 +729,7 @@ function setupDual(loId, hiId, loOutId, hiOutId, fillId, min, max, suffix) {
 
 // ── FILTERS ──
 // Quick search state — independent of filter UI
-let qs = { deps:[], arrs:[], airlines:[], acFamily:null, yearLo:null, yearHi:null, durHi:null };
+let qs = { deps:[], arrs:[], airlines:[], acFamilies:[], yearLo:null, yearHi:null, durHi:null };
 
 function getFilters() {
   const deps = document.getElementById('dep').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
@@ -756,7 +756,7 @@ function getFilters() {
 function hasActiveFilters(fi) {
   const sliderDefault = fi.durLo === 0 && fi.durHi === 22*60 && fi.yrLo === 1950 && fi.yrHi === 2024;
   const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && !fi.departsEnable;
-  const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamily && qs.yearLo === null && qs.durHi === null;
+  const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamilies.length && qs.yearLo === null && qs.durHi === null;
   return !(noManual && noQS);
 }
 
@@ -801,7 +801,7 @@ function matchesFilters(f, fi) {
   if (qs.deps.length) { if (!qs.deps.some(d => f.dep === d)) return false; }
   if (qs.arrs.length) { if (!qs.arrs.some(a => f.arr === a)) return false; }
   if (qs.airlineSet && qs.airlineSet.size) { if (!qs.airlineSet.has(f.airline)) return false; }
-  if (qs.acFamily) { if (!(f.acLabel||'').includes(qs.acFamily)) return false; }
+  if (qs.acFamilies.length) { if (!qs.acFamilies.some(fam => (f.acLabel||'').includes(fam))) return false; }
   if (qs.yearLo !== null) { if (f.year < qs.yearLo || f.year > (qs.yearHi||qs.yearLo)) return false; }
   if (qs.flightNum !== null) { const key=(f.airline+qs.flightNum).toUpperCase(); if (!f.fns || !f.fns.split(',').some(n=>(f.airline+n.trim()).toUpperCase()===key)) return false; }
   if (qs.durHi !== null) { if (f.dur > qs.durHi) return false; }
@@ -1295,7 +1295,7 @@ function resetAll() {
   document.getElementById('smart-input').value='';
   document.getElementById('smart-tokens').innerHTML='';
   document.getElementById('smart-hint').textContent='ICAO · city · airline · aircraft · decade';
-  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamilies:[], yearLo:null, yearHi:null, durHi:null, flightNum:null };
   history.replaceState(null,'','#');
   setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
   setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
@@ -1383,7 +1383,7 @@ function removeToken(type, value) {
   if (type === 'dep')     qs.deps     = qs.deps.filter(x => x !== value);
   if (type === 'arr')     qs.arrs     = qs.arrs.filter(x => x !== value);
   if (type === 'airline') { qs.airlines = qs.airlines.filter(x => x !== value); qs.airlineSet.delete(value); }
-  if (type === 'ac')      qs.acFamily  = null;
+  if (type === 'ac')      qs.acFamilies = qs.acFamilies.filter(x => x !== value);
   if (type === 'year')    { qs.yearLo = null; qs.yearHi = null; }
   if (type === 'dur')     qs.durHi    = null;
   if (type === 'flt')     qs.flightNum = null;
@@ -1394,7 +1394,7 @@ function removeToken(type, value) {
     ...qs.deps.map(d => ({type:'dep',value:d,label:`DEP: ${d}`})),
     ...qs.arrs.map(a => ({type:'arr',value:a,label:`ARR: ${a}`})),
     ...qs.airlines.map(a => ({type:'airline',value:a,label:AL_MAP[a]||a})),
-    ...(qs.acFamily ? [{type:'ac',value:qs.acFamily,label:`AC: ${qs.acFamily}`}] : []),
+    ...qs.acFamilies.map(f => ({type:'ac',value:f,label:`AC: ${f}`})),
     ...(qs.yearLo!==null ? [{type:'year',value:'year',label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`}] : []),
     ...(qs.durHi!==null  ? [{type:'dur',value:'dur',label:`≤${qs.durHi}h`}] : []),
     ...(qs.flightNum!==null ? [{type:'flt',value:'flt',label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`}] : []),
@@ -1421,7 +1421,7 @@ function parseSmartSearch() {
   const hintEl = document.getElementById('smart-hint');
 
   if (!raw) {
-    qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+    qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamilies:[], yearLo:null, yearHi:null, durHi:null, flightNum:null };
     tokensEl.innerHTML = '';
     hintEl.textContent = 'ICAO · city · airline · aircraft · decade';
     encodeState();
@@ -1435,7 +1435,7 @@ function parseSmartSearch() {
   const upper = raw.toUpperCase().split(/[\s,]+/).filter(Boolean);
 
   // Reset quick search state - DON'T touch filter UI
-  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamilies:[], yearLo:null, yearHi:null, durHi:null, flightNum:null };
 
   // Multi-word airline aliases
   for (const [alias, codes] of Object.entries(AIRLINE_ALIASES)) {
@@ -1467,7 +1467,7 @@ function parseSmartSearch() {
     }
     // Aircraft aliases
     const acMatch = AC_ALIASES[w];
-    if (acMatch) { qs.acFamily = acMatch[0]; return; }
+    if (acMatch) { if (!qs.acFamilies.includes(acMatch[0])) qs.acFamilies.push(acMatch[0]); return; }
     // Duration
     if (/^(\d+)h$/.test(w)) { qs.durHi=parseInt(w); return; }
     if (w==='short') { qs.durHi=3; return; }
@@ -1513,7 +1513,7 @@ function parseSmartSearch() {
     ...qs.deps.map(d => {const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}}),
     ...qs.arrs.map(a => {const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}}),
     ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
-    ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
+    ...qs.acFamilies.map(f => ({label:`AC: ${f}`,cls:'token-ac'})),
     ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
     ...(qs.durHi!==null ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
     ...(qs.flightNum!==null ? [{label:`FLT: ${qs.airlines.length?qs.airlines[0]:''}${qs.flightNum}`,cls:'token-airline'}] : []),
@@ -1524,7 +1524,7 @@ function parseSmartSearch() {
     ...qs.deps.map(d => ({type:'dep',value:d,cls:'token-dep',label:`DEP: ${d}${AP_MAP[d]?' ('+AP_MAP[d][1]+')':''}`})),
     ...qs.arrs.map(a => ({type:'arr',value:a,cls:'token-arr',label:`ARR: ${a}${AP_MAP[a]?' ('+AP_MAP[a][1]+')':''}`})),
     ...qs.airlines.map(a => ({type:'airline',value:a,cls:'token-airline',label:AL_MAP[a]||a})),
-    ...(qs.acFamily ? [{type:'ac',value:qs.acFamily,cls:'token-ac',label:`AC: ${qs.acFamily}`}] : []),
+    ...qs.acFamilies.map(f => ({type:'ac',value:f,cls:'token-ac',label:`AC: ${f}`})),
     ...(qs.yearLo!==null ? [{type:'year',value:'year',cls:'token-year',label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`}] : []),
     ...(qs.durHi!==null  ? [{type:'dur',value:'dur',cls:'token-dur',label:`≤${qs.durHi}h`}] : []),
     ...(qs.flightNum!==null ? [{type:'flt',value:'flt',cls:'token-airline',label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`}] : []),
@@ -1581,7 +1581,7 @@ function encodeState() {
   if (qs.deps.length)    parts.push('d=' + qs.deps.join(','));
   if (qs.arrs.length)    parts.push('a=' + qs.arrs.join(','));
   if (qs.airlines.length) parts.push('al=' + qs.airlines.join(','));
-  if (qs.acFamily)       parts.push('ac=' + encodeURIComponent(qs.acFamily));
+  if (qs.acFamilies.length) parts.push('ac=' + qs.acFamilies.map(encodeURIComponent).join(','));
   if (qs.yearLo !== null) parts.push('y=' + qs.yearLo + '-' + qs.yearHi);
   if (qs.durHi !== null)  parts.push('dur=' + qs.durHi);
   const hash = parts.length ? '#' + parts.join('&') : '#';
@@ -1593,11 +1593,11 @@ function decodeState() {
   if (!hash) return;
   const params = {};
   hash.split('&').forEach(p => { const [k,v] = p.split('='); if(k&&v) params[k]=v; });
-  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamily:null, yearLo:null, yearHi:null, durHi:null, flightNum:null };
+  qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamilies:[], yearLo:null, yearHi:null, durHi:null, flightNum:null };
   if (params.d)  { qs.deps    = params.d.split(',').filter(Boolean); }
   if (params.a)  { qs.arrs    = params.a.split(',').filter(Boolean); }
   if (params.al) { qs.airlines = params.al.split(',').filter(Boolean); qs.airlineSet = new Set(qs.airlines); }
-  if (params.ac) { qs.acFamily = decodeURIComponent(params.ac); }
+  if (params.ac) { qs.acFamilies = params.ac.split(',').filter(Boolean).map(decodeURIComponent); }
   if (params.y)  { const [lo,hi]=params.y.split('-'); qs.yearLo=parseInt(lo); qs.yearHi=parseInt(hi); }
   if (params.dur){ qs.durHi = parseInt(params.dur); }
 
@@ -1606,7 +1606,7 @@ function decodeState() {
     ...qs.deps.map(d  => { const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}; }),
     ...qs.arrs.map(a  => { const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}; }),
     ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
-    ...(qs.acFamily ? [{label:`AC: ${qs.acFamily}`,cls:'token-ac'}] : []),
+    ...qs.acFamilies.map(f => ({label:`AC: ${f}`,cls:'token-ac'})),
     ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
     ...(qs.durHi!==null  ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
   ];
