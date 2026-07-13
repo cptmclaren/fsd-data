@@ -402,9 +402,9 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
               <option value="Boeing 707">Boeing 707</option>
               <option value="Boeing 717">Boeing 717</option>
               <option value="Boeing 727">Boeing 727</option>
-              <option value="Boeing 737-100">Boeing 737 Original (-100 and -200)</option>
-              <option value="Boeing 737-300">Boeing 737 Classic (-300 to -500)</option>
-              <option value="Boeing 737-600">Boeing 737 NG (600-900)</option>
+              <option value="737R:12">Boeing 737 Original (-100 and -200)</option>
+              <option value="737R:345">Boeing 737 Classic (-300 to -500)</option>
+              <option value="737R:6789">Boeing 737 NG (600-900)</option>
               <option value="Boeing 737 MAX">Boeing 737 MAX</option>
               <option value="747C:Boeing 747">Boeing 747 Classic (-100/-200/-300/SP)</option>
               <option value="747N:Boeing 747">Boeing 747 NG (-400/-8)</option>
@@ -729,7 +729,7 @@ function setupDual(loId, hiId, loOutId, hiOutId, fillId, min, max, suffix) {
 
 // ── FILTERS ──
 // Quick search state — independent of filter UI
-let qs = { deps:[], arrs:[], airlines:[], acFamilies:[], yearLo:null, yearHi:null, durHi:null };
+let qs = { deps:[], arrs:[], airlines:[], acFamilies:[], yearLo:null, yearHi:null, durHi:null, flightNum:null };
 
 function getFilters() {
   const deps = document.getElementById('dep').value.trim().toUpperCase().split(',').map(s=>s.trim()).filter(Boolean);
@@ -782,6 +782,12 @@ function matchesFilters(f, fi) {
       if (fam.startsWith('747N:')) {
         // NG: -400 and -8 variants
         return label.includes('Boeing 747') && /747-[48]/.test(label);
+      }
+      if (fam.startsWith('737R:')) {
+        // Digits after the colon are the allowed 737 series digit (e.g. "12" -> -100/-200)
+        const digits = fam.slice(5);
+        const m = label.match(/Boeing 737-(\d)\d\d/);
+        return !!m && digits.includes(m[1]);
       }
       return label.includes(fam);
     });
@@ -845,6 +851,18 @@ function acFamilyAdd(sel) {
 function acFamilyRemove(val) {
   selAcFamilies.delete(val);
   // clean up any excluded variants that belonged to this family
+  if (val.startsWith('737R:')) {
+    const digits = val.slice(5);
+    for (const code of [...excludedVariants]) {
+      const label = AC_MAP[code] || '';
+      const m = label.match(/Boeing 737-(\d)\d\d/);
+      if (m && digits.includes(m[1])) excludedVariants.delete(code);
+    }
+    renderAcTags();
+    renderAcVariants();
+    queueRender();
+    return;
+  }
   const is747C = val.startsWith('747C:'), is747N = val.startsWith('747N:');
   const base = (val.startsWith('CEO:') || val.startsWith('NEO:') || is747C || is747N) ? val.slice(val.indexOf(':')+1) : val;
   const neoOnly = val.startsWith('NEO:');
@@ -897,6 +915,7 @@ function renderAcVariants() {
       if (fam.startsWith('NEO:')) { const b=fam.slice(4); return label.includes(b) && /neo/i.test(label); }
       if (fam.startsWith('747C:')) { return label.includes('Boeing 747') && !/747-[48]/.test(label); }
       if (fam.startsWith('747N:')) { return label.includes('Boeing 747') && /747-[48]/.test(label); }
+      if (fam.startsWith('737R:')) { const digits=fam.slice(5); const m=label.match(/Boeing 737-(\d)\d\d/); return !!m && digits.includes(m[1]); }
       return label.includes(fam);
     })) {
       variants.push({ code, label });
@@ -1314,7 +1333,10 @@ const AC_ALIASES = {
   '748':['Boeing 747-8'],'74s':['Boeing 747SP'],'747':['Boeing 747'],
   'b747':['Boeing 747'],'b742':['Boeing 747-200'],'b741':['Boeing 747-100'],'b744':['Boeing 747-400'],
   '721':['Boeing 727'],'722':['Boeing 727'],'727':['Boeing 727'],'b727':['Boeing 727'],
-  '737':['Boeing 737'],'b737':['Boeing 737'],'b738':['Boeing 737-800'],
+  '737':['Boeing 737'],'b737':['Boeing 737'],
+  'b731':['Boeing 737-100'],'b732':['Boeing 737-200'],'b733':['Boeing 737-300'],
+  'b734':['Boeing 737-400'],'b735':['Boeing 737-500'],'b736':['Boeing 737-600'],
+  'b738':['Boeing 737-800'],'b739':['Boeing 737-900'],
   '737ng':['Boeing 737-'],'737max':['Boeing 737 MAX'],'737classic':['Boeing 737-3'],
   '707':['Boeing 707'],'720':['Boeing 720'],
   '752':['Boeing 757'],'753':['Boeing 757'],'757':['Boeing 757'],
