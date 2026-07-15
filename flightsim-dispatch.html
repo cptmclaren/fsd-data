@@ -569,7 +569,6 @@ const AP_MAP = {};
 const AL_MAP = {};
 const AC_MAP = {};
 const CITY_MAP = {};
-let ROUTES_B64_VALUE = "";
 
 // ── EMBEDDED DATA ──
 
@@ -587,19 +586,49 @@ let selRoute = null, selFlightIdx = null;
 let renderTimer = null;
 let sliderTimer = null;
 
-// ── DECOMPRESS + PARSE ──
+// ── FETCH + PARSE ──
+async function gunzipToText(bytes) {
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  writer.write(new Uint8Array(bytes));
+  writer.close();
+  const reader = ds.readable.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return new TextDecoder().decode(result);
+}
+
 async function loadData() {
   const loadText = document.getElementById('loading-text');
   loadText.textContent = 'Fetching route database...';
   await new Promise(r => setTimeout(r, 10));
 
-  let dataText;
+  // /meta and /routes are stored gzip-compressed at rest and served as raw
+  // bytes — fetched directly with no base64 layer, then decompressed here.
+  const BASE = 'https://fsd-data.vorahamaad.workers.dev';
+  const headers = { 'X-FSD-Key': 'fsd-9x2Kp$vR#mQ7wL@nT4hZ' };
+  let meta, text;
   try {
-    const res = await fetch('https://fsd-data.vorahamaad.workers.dev', {
-      headers: { 'X-FSD-Key': 'fsd-9x2Kp$vR#mQ7wL@nT4hZ' }
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    dataText = await res.text();
+    const [metaRes, routesRes] = await Promise.all([
+      fetch(BASE + '/meta', { headers }),
+      fetch(BASE + '/routes', { headers }),
+    ]);
+    if (!metaRes.ok) throw new Error('meta HTTP ' + metaRes.status);
+    if (!routesRes.ok) throw new Error('routes HTTP ' + routesRes.status);
+    const [metaText, routesText] = await Promise.all([
+      gunzipToText(await metaRes.arrayBuffer()),
+      gunzipToText(await routesRes.arrayBuffer()),
+    ]);
+    meta = JSON.parse(metaText);
+    text = routesText;
   } catch (err) {
     loadText.textContent = 'Failed to load data: ' + err.message;
     console.error('Data fetch failed:', err);
@@ -609,50 +638,17 @@ async function loadData() {
   loadText.textContent = 'Initialising database...';
   await new Promise(r => setTimeout(r, 10));
 
-  // Execute the data script in this scope so AP_MAP, AL_MAP, AC_MAP,
-  // CITY_MAP and ROUTES_B64 become available as local variables.
-  const dataFn = new Function(dataText + '\nreturn {AP_MAP,AL_MAP,AC_MAP,CITY_MAP,ROUTES_B64};');
-  const data = dataFn();
-  // Assign into the outer scope variables the rest of the app uses
-  Object.assign(AP_MAP, data.AP_MAP);
-  Object.assign(AL_MAP, data.AL_MAP);
-  Object.assign(AC_MAP, data.AC_MAP);
-  Object.assign(CITY_MAP, data.CITY_MAP);
-  ROUTES_B64_VALUE = data.ROUTES_B64;
+  Object.assign(AP_MAP, meta.AP_MAP);
+  Object.assign(AL_MAP, meta.AL_MAP);
+  Object.assign(AC_MAP, meta.AC_MAP);
+  Object.assign(CITY_MAP, meta.CITY_MAP);
   // Rebuild sets that were populated at parse time from empty stubs
   ICAO_AP_SET = new Set(Object.keys(AP_MAP));
   ICAO_AL_SET = new Set(Object.keys(AL_MAP));
 
-  loadText.textContent = 'Decompressing route database...';
-  await new Promise(r => setTimeout(r, 10));
-  
-  // Fast base64 decode via native browser fetch — avoids the slow
-  // atob+charCodeAt loop which iterates ~8M characters in JS
-  const b64resp = await fetch('data:application/octet-stream;base64,' + ROUTES_B64_VALUE);
-  const bytes = new Uint8Array(await b64resp.arrayBuffer());
-  
-  // Decompress gzip
-  const ds = new DecompressionStream('gzip');
-  const writer = ds.writable.getWriter();
-  const reader = ds.readable.getReader();
-  writer.write(bytes);
-  writer.close();
-  
-  const chunks = [];
-  while (true) {
-    const {done, value} = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-  const result = new Uint8Array(totalLen);
-  let offset = 0;
-  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
-  const text = new TextDecoder().decode(result);
-  
   loadText.textContent = 'Parsing 604,530 routes...';
   await new Promise(r => setTimeout(r, 10));
-  
+
   // Parse pipe-delimited and build indexes in a single pass
   const lines = text.split('\n');
   DB = [];
