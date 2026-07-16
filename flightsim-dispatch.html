@@ -383,8 +383,11 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .bottombar { flex-wrap:wrap; }
   .bottombar .btn { flex:1 1 auto; min-height:40px; }
 
-  /* Bigger touch targets throughout */
+  /* Bigger touch targets throughout. Font-size must stay >=16px on any
+     text/number input — iOS Safari auto-zooms the page on focus otherwise.
+     (Selects open a native picker instead, so they're unaffected.) */
   .btn, .smart-btn, input[type=text], select, input[type=number] { min-height:40px; }
+  input[type=text], input[type=number] { font-size:16px; }
   .role-row label, .andor-row label, .flabel-checkbox { min-height:32px; }
   .token .x, .ac-tag-x { width:20px; height:20px; }
   .ac-variant { padding:5px 10px; font-size:11px; }
@@ -625,22 +628,22 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
             <button class="sort-seg-btn" data-sort="year" onclick="setSortSeg(this)">Year<span class="seg-arrow"></span></button>
           </div>
         </div>
+        <select id="sort-sel" onchange="setSort(this.value)">
+          <option value="airline">Airline</option>
+          <option value="dep">Departure</option>
+          <option value="arr">Arrival</option>
+          <option value="ac">Aircraft</option>
+          <option value="dur-asc">Duration (short first)</option>
+          <option value="dur-desc">Duration (long first)</option>
+          <option value="year-asc">Year (oldest first)</option>
+          <option value="year-desc">Year (newest first)</option>
+        </select>
         <span class="filter-note" id="filter-note"></span>
         <button class="mobile-filters-btn" id="mobile-filters-btn" onclick="openFilterSheet()">
           <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i> Filters
           <span class="mobile-filters-badge" id="mobile-filters-badge" style="display:none;"></span>
         </button>
       </div>
-      <select id="sort-sel" onchange="setSort(this.value)">
-        <option value="airline">Airline</option>
-        <option value="dep">Departure</option>
-        <option value="arr">Arrival</option>
-        <option value="ac">Aircraft</option>
-        <option value="dur-asc">Duration (short first)</option>
-        <option value="dur-desc">Duration (long first)</option>
-        <option value="year-asc">Year (oldest first)</option>
-        <option value="year-desc">Year (newest first)</option>
-      </select>
 
       <div class="table-head">
         <div class="th" id="th-airline" onclick="setSort('airline')">Airline</div>
