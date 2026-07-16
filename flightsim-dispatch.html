@@ -300,6 +300,97 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 /* ── VIRTUAL SCROLLER ── */
 .vscroll-sizer  { position:relative; width:100%; }
 .vscroll-window { position:absolute; top:0; left:0; right:0; }
+
+/* ── MOBILE ── */
+#sort-sel { display:none; }
+.mobile-filters-btn { display:none; }
+.mobile-sheet-head { display:none; }
+.mobile-card-list { display:none; }
+.mobile-scrim {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0);
+  z-index:40; opacity:0; pointer-events:none; transition:opacity .2s ease;
+}
+.mobile-scrim.show { opacity:1; pointer-events:auto; background:rgba(0,0,0,.5); }
+
+/* Route cards (mobile equivalent of .tr) */
+.mcard {
+  padding:10px 14px; border-bottom:1px solid var(--border); cursor:pointer;
+  display:flex; flex-direction:column; justify-content:center; gap:6px; transition:background .1s;
+}
+.mcard.active { background:var(--accent-dim2); border-left:3px solid var(--accent); padding-left:11px; }
+.mcard-top, .mcard-bottom { display:flex; justify-content:space-between; align-items:center; }
+.mcard-airline { font-size:12px; font-weight:600; color:var(--accent); }
+.mcard-year { font-size:11px; color:var(--text3); }
+.mcard-route { display:flex; align-items:center; gap:8px; }
+.mcard-ap { display:flex; flex-direction:column; font-size:16px; font-weight:600; color:var(--text); min-width:0; }
+.mcard-ap-r { align-items:flex-end; }
+.mcard-city { font-size:10px; font-weight:400; color:var(--text3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px; }
+.mcard-arrow { flex:1; text-align:center; color:var(--text3); font-size:13px; }
+.mcard-ac { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mcard-dur { font-size:11px; color:var(--text2); flex-shrink:0; margin-left:8px; }
+
+@media (max-width: 767px) {
+  .titlebar-sub { display:none; }
+  .mobile-scrim { display:block; }
+
+  /* Single-column stack: search stays inline at top, results fill the rest */
+  .body { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
+  .left { border-right:none; border-bottom:1px solid var(--border2); }
+
+  /* Filters and flight detail become bottom sheets instead of competing
+     for space in a narrow rail. Slide via `bottom` rather than transform
+     so it doesn't depend on GPU compositing being available. */
+  .filters, .detail-panel {
+    display:flex; flex-direction:column;
+    position:fixed; left:0; right:0; bottom:-100vh; z-index:50;
+    max-height:80vh; background:var(--bg2);
+    border:1px solid var(--border2); border-bottom:none;
+    border-radius:14px 14px 0 0; box-shadow:0 -10px 30px rgba(0,0,0,.4);
+    transition:bottom .25s cubic-bezier(.4,0,.2,1);
+  }
+  .filters.mobile-sheet-open, .detail-panel.mobile-sheet-open { bottom:0; }
+  .filters { padding-top:0; max-height:80vh; }
+  .detail-panel { padding-top:0; overflow-y:auto; }
+
+  .mobile-sheet-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 14px 10px; font-size:13px; font-weight:600; color:var(--text);
+    position:sticky; top:0; background:var(--bg2); border-bottom:1px solid var(--border); margin-bottom:8px;
+  }
+  .mobile-sheet-close {
+    display:flex; align-items:center; justify-content:center;
+    width:32px; height:32px; border-radius:8px; font-size:16px; color:var(--text2); cursor:pointer;
+  }
+  .mobile-sheet-close:hover { background:var(--bg3); color:var(--text); }
+
+  .mobile-filters-btn {
+    display:flex; align-items:center; gap:6px; position:relative;
+    background:var(--accent-dim); color:var(--accent); border:1px solid rgba(217,119,87,.3);
+    border-radius:16px; padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; margin-left:auto;
+  }
+  .mobile-filters-badge {
+    width:8px; height:8px; border-radius:50%; background:var(--accent);
+  }
+  .right-topbar { flex-wrap:nowrap; }
+  .sort-seg-wrap { display:none; }
+  #sort-sel { display:block; flex:0 1 140px; font-size:12px; padding:6px 8px; }
+  .filter-note { display:none; } /* redundant with bottombar-stats on narrow screens */
+
+  /* Grid table -> card list */
+  .table-head, .table-wrap { display:none; }
+  .mobile-card-list { display:block; flex:1; overflow-y:auto; position:relative; -webkit-overflow-scrolling:touch; }
+
+  .bottombar { flex-wrap:wrap; }
+  .bottombar .btn { flex:1 1 auto; min-height:40px; }
+
+  /* Bigger touch targets throughout */
+  .btn, .smart-btn, input[type=text], select, input[type=number] { min-height:40px; }
+  .role-row label, .andor-row label, .flabel-checkbox { min-height:32px; }
+  .token .x, .ac-tag-x { width:20px; height:20px; }
+  .ac-variant { padding:5px 10px; font-size:11px; }
+  .dual-wrap { padding:10px 0; }
+  .dual-wrap input[type=range]::-webkit-slider-thumb { width:20px; height:20px; }
+}
 </style>
 </head>
 <body>
@@ -334,7 +425,14 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <div class="smart-hint" id="smart-hint">ICAO · city · airline · aircraft · decade</div>
       </div>
 
-      <div class="filters">
+      <div class="filters" id="filters-panel">
+
+        <div class="mobile-sheet-head">
+          <span>Filters</span>
+          <span class="mobile-sheet-close" onclick="closeFilterSheet()">
+            <i class="ti ti-x" aria-hidden="true"></i>
+          </span>
+        </div>
 
         <!-- Specify airport details checkbox + dep/arr -->
         <div class="fg">
@@ -528,8 +626,12 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
           </div>
         </div>
         <span class="filter-note" id="filter-note"></span>
+        <button class="mobile-filters-btn" id="mobile-filters-btn" onclick="openFilterSheet()">
+          <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i> Filters
+          <span class="mobile-filters-badge" id="mobile-filters-badge" style="display:none;"></span>
+        </button>
       </div>
-      <select id="sort-sel" style="display:none;" onchange="setSort(this.value)">
+      <select id="sort-sel" onchange="setSort(this.value)">
         <option value="airline">Airline</option>
         <option value="dep">Departure</option>
         <option value="arr">Arrival</option>
@@ -553,6 +655,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
       <div class="table-wrap" id="table-wrap">
         <div class="no-results" style="padding:60px 0;"><div class="no-results-big">⟳</div>Loading...</div>
       </div>
+      <div class="mobile-card-list" id="mobile-card-list"></div>
 
       <div class="bottombar">
         <button class="btn" onclick="randomFlight()">Random Flight</button>
@@ -560,6 +663,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <span class="bottombar-stats" id="bottombar-stats"></span>
       </div>
     </div>
+    <div class="mobile-scrim" id="mobile-scrim" onclick="closeAnyMobileSheet()"></div>
   </div>
 </div>
 
@@ -945,13 +1049,17 @@ function queueRenderSlow() { queueRender(300); }  // for sliders
 function renderTable() {
   if (!DB.length) return;
   const fi = getFilters();
+  updateMobileFiltersBadge(fi);
 
   // Show empty state if no filters active
   const wrap = document.getElementById('table-wrap');
+  const mobileWrap = document.getElementById('mobile-card-list');
   if (!hasActiveFilters(fi)) {
     document.getElementById('filter-note').innerHTML = `<span>${DB.length.toLocaleString()}</span> routes loaded`;
     document.getElementById('bottombar-stats').innerHTML = '';
-    wrap.innerHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">✈</div>Enter filters or use Quick Search to find routes</div>';
+    const emptyHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">✈</div>Enter filters or use Quick Search to find routes</div>';
+    wrap.innerHTML = emptyHTML;
+    mobileWrap.innerHTML = emptyHTML;
     return;
   }
 
@@ -1028,11 +1136,14 @@ function renderTable() {
   });
 
   if (!shown.length) {
-    wrap.innerHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">∅</div>No routes match the current filters.</div>';
+    const noResultsHTML = '<div class="no-results" style="padding:60px 0;"><div class="no-results-big">∅</div>No routes match the current filters.</div>';
+    wrap.innerHTML = noResultsHTML;
+    mobileWrap.innerHTML = noResultsHTML;
     return;
   }
 
   mountVScroll(wrap, shown, more);
+  mountMobileCards(shown);
 }
 
 
@@ -1095,6 +1206,69 @@ function mountVScroll(wrap, rows, more) {
 
   vsScrollListener = paint;
   wrap.addEventListener('scroll', vsScrollListener, { passive: true });
+  paint();
+}
+
+// ── MOBILE CARD LIST — separate container, own virtual scroller ──
+const MOBILE_ROW_H = 96;   // px — must match .mcard height
+let vsMobileScrollListener = null;
+
+function mobileCardHTML(f) {
+  const apDep = AP_MAP[f.dep];
+  const apArr = AP_MAP[f.arr];
+  const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,18) : '';
+  const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,18) : '';
+  const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
+                   selRoute.airline===f.airline && selRoute.ac===f.ac;
+  const seasonBadge = f.season==='S' ? '<span class="badge badge-s">S</span>'
+                    : f.season==='W' ? '<span class="badge badge-w">W</span>' : '';
+  const cargoBadge = (f.acLabel||'').match(/freight|cargo|freighter|combi/i) ? '<span class="badge badge-cargo">CARGO</span>' : '';
+  const fnLabel = f.fns ? f.airline + f.fns.split(',')[0].trim() : (AL_MAP[f.airline]||f.airline);
+  return `<div class="mcard${isActive?' active':''}" style="position:absolute;left:0;right:0;height:${MOBILE_ROW_H}px;">
+    <div class="mcard-top">
+      <span class="mcard-airline td-mono">${fnLabel}</span>
+      <span class="mcard-year td-mono">${f.year} ${seasonBadge}</span>
+    </div>
+    <div class="mcard-route">
+      <div class="mcard-ap"><span class="td-mono">${f.dep}</span><span class="mcard-city">${depCity}</span></div>
+      <div class="mcard-arrow">→</div>
+      <div class="mcard-ap mcard-ap-r"><span class="td-mono">${f.arr}</span><span class="mcard-city">${arrCity}</span></div>
+    </div>
+    <div class="mcard-bottom">
+      <span class="mcard-ac">${f.acLabel.substring(0,26)} ${cargoBadge}</span>
+      <span class="mcard-dur td-mono">${formatDur(f.dur)}</span>
+    </div>
+  </div>`;
+}
+
+function mountMobileCards(rows) {
+  const wrap = document.getElementById('mobile-card-list');
+  if (vsMobileScrollListener) { wrap.removeEventListener('scroll', vsMobileScrollListener); vsMobileScrollListener = null; }
+
+  const totalH = rows.length * MOBILE_ROW_H;
+  wrap.innerHTML = `<div class="vscroll-sizer" style="height:${totalH}px;"><div class="vscroll-window" id="mvs-window"></div></div>`;
+
+  const win = wrap.querySelector('#mvs-window');
+  const OVERSCAN = 5;
+
+  function paint() {
+    const scrollTop = wrap.scrollTop;
+    const viewH = wrap.clientHeight;
+    const firstIdx = Math.max(0, Math.floor(scrollTop / MOBILE_ROW_H) - OVERSCAN);
+    const lastIdx  = Math.min(rows.length - 1, Math.ceil((scrollTop + viewH) / MOBILE_ROW_H) + OVERSCAN);
+    let html = '';
+    for (let i = firstIdx; i <= lastIdx; i++) {
+      const top = i * MOBILE_ROW_H;
+      html += mobileCardHTML(rows[i]).replace('style="position:absolute', `style="position:absolute;top:${top}px`);
+    }
+    win.innerHTML = html;
+    win.querySelectorAll('.mcard').forEach((el, j) => {
+      el.onclick = () => selectRoute(rows[firstIdx + j]);
+    });
+  }
+
+  vsMobileScrollListener = paint;
+  wrap.addEventListener('scroll', vsMobileScrollListener, { passive: true });
   paint();
 }
 
@@ -1172,22 +1346,55 @@ function selectRoute(f) {
   // clicking the already-selected route deselects it
   if (selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
       selRoute.airline===f.airline && selRoute.ac===f.ac) {
-    selRoute = null;
-    selFlightIdx = null;
-    document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
-    renderTable();
+    closeDetail();
     return;
   }
   selRoute = f;
   selFlightIdx = 0;
   showDetail(f);
+  document.getElementById('detail-panel').classList.add('mobile-sheet-open');
+  document.getElementById('mobile-scrim').classList.add('show');
   renderTable();
+}
+
+function closeDetail() {
+  selRoute = null;
+  selFlightIdx = null;
+  document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
+  document.getElementById('detail-panel').classList.remove('mobile-sheet-open');
+  document.getElementById('mobile-scrim').classList.remove('show');
+  renderTable();
+}
+
+// ── MOBILE FILTER SHEET ──
+function openFilterSheet() {
+  document.getElementById('filters-panel').classList.add('mobile-sheet-open');
+  document.getElementById('mobile-scrim').classList.add('show');
+}
+function closeFilterSheet() {
+  document.getElementById('filters-panel').classList.remove('mobile-sheet-open');
+  document.getElementById('mobile-scrim').classList.remove('show');
+}
+function closeAnyMobileSheet() {
+  closeFilterSheet();
+  document.getElementById('detail-panel').classList.remove('mobile-sheet-open');
+  document.getElementById('mobile-scrim').classList.remove('show');
+}
+function updateMobileFiltersBadge(fi) {
+  const badge = document.getElementById('mobile-filters-badge');
+  if (!badge) return;
+  const active = hasActiveFilters(fi);
+  badge.style.display = active ? '' : 'none';
 }
 
 function showDetail(f) {
   const depA = AP_MAP[f.dep] || [f.dep,'',''];
   const arrA = AP_MAP[f.arr] || [f.arr,'',''];
   document.getElementById('detail-panel').innerHTML = `
+    <div class="mobile-sheet-head">
+      <span>Flight Detail</span>
+      <span class="mobile-sheet-close" onclick="closeDetail()"><i class="ti ti-x" aria-hidden="true"></i></span>
+    </div>
     <div class="detail-title">${AL_MAP[f.airline]||f.airline} (${f.airline}) · ${f.year} ${f.season==='S'?'Summer':f.season==='W'?'Winter':''}</div>
     <div class="detail-route">
       <div><div class="dr-icao">${f.dep}</div><div class="dr-name">${(depA[0]||'').substring(0,28)}</div><div class="dr-name">${depA[1]||''}</div></div>
