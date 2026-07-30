@@ -1995,6 +1995,8 @@ const SELECTED_COLOR = 0xffa35c;
 const BASE_WIDTH = 2.2;
 const SELECTED_WIDTH = 5;
 const CLICK_DRAG_THRESHOLD = 5; // px — pointer moves beyond this = a rotate drag, not a click
+const MIN_DIST = 7, MAX_DIST = 30;
+let targetDistance = 15; // eased-toward camera distance, driven by our own wheel handler
 
 let scene, camera, renderer, controls, routeGroup, airportPoints;
 let initPromise = null, visible = false;
@@ -2061,11 +2063,16 @@ function init() {
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
-    controls.minDistance = 7;
-    controls.maxDistance = 30;
+    controls.minDistance = MIN_DIST;
+    controls.maxDistance = MAX_DIST;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.zoomSpeed = 0.4;   // default (1) feels like it snaps in on a single wheel tick
+    // Built-in wheel zoom applies each wheel event's delta near-instantly — on
+    // trackpads/some mice that fire many events per gesture it feels like a
+    // single scroll snaps the view in. We disable it and drive zoom ourselves
+    // (see onWheel/animate) so it always eases smoothly toward a target.
+    controls.enableZoom = false;
+    targetDistance = camera.position.length();
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -2100,6 +2107,7 @@ function init() {
     renderer.domElement.addEventListener('pointerleave', onPointerLeave);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 
     const loadingEl = document.getElementById('globe-loading');
     if (loadingEl) loadingEl.style.display = 'none';
@@ -2135,6 +2143,33 @@ function onPointerMove(e) {
 function onPointerLeave() {
   mouseNDC.set(-99, -99);
   if (!pendingHoverCheck) { pendingHoverCheck = true; requestAnimationFrame(checkHover); }
+}
+// A trackpad/precision-scroll mouse fires many small wheel events for one
+// physical gesture. Clamping each event's own delta isn't enough — dozens of
+// small clamped steps still multiply together into a big total change. So
+// instead we bucket events into short time windows and cap the TOTAL zoom
+// achievable within one window, re-anchored to the distance at the window's
+// start — the result is the same whether a gesture arrives as 1 big event or
+// 40 tiny ones, and it's bounded either way.
+let wheelWindowStart = 0;
+let wheelWindowDelta = 0;
+let wheelBaseDistance = null;
+const WHEEL_WINDOW_MS = 150;
+const WHEEL_MAX_DELTA = 150;
+const WHEEL_WINDOW_MAX_FACTOR = 0.82; // most a single window can zoom in by
+
+function onWheel(e) {
+  e.preventDefault();
+  const now = performance.now();
+  if (wheelBaseDistance === null || now - wheelWindowStart > WHEEL_WINDOW_MS) {
+    wheelWindowStart = now;
+    wheelWindowDelta = 0;
+    wheelBaseDistance = targetDistance;
+  }
+  wheelWindowDelta += e.deltaY;
+  const capped = Math.sign(wheelWindowDelta) * Math.min(Math.abs(wheelWindowDelta), WHEEL_MAX_DELTA);
+  const factor = Math.pow(WHEEL_WINDOW_MAX_FACTOR, capped / WHEEL_MAX_DELTA);
+  targetDistance = Math.min(MAX_DIST, Math.max(MIN_DIST, wheelBaseDistance * factor));
 }
 function onPointerDown(e) {
   pointerDownPos = { x: e.clientX, y: e.clientY };
@@ -2201,6 +2236,17 @@ function checkHover() {
 function animate() {
   requestAnimationFrame(animate);
   if (!visible) return;
+  // Ease the camera toward targetDistance (set by onWheel) instead of jumping —
+  // OrbitControls re-derives its internal spherical radius from camera.position
+  // at the top of update(), so nudging position here composes cleanly with its
+  // own rotate/pan damping and still gets clamped to min/maxDistance below.
+  const offset = camera.position.clone().sub(controls.target);
+  const dist = offset.length();
+  if (Math.abs(dist - targetDistance) > 0.001) {
+    const eased = dist + (targetDistance - dist) * 0.15;
+    offset.setLength(eased);
+    camera.position.copy(controls.target).add(offset);
+  }
   controls.update();
   renderer.render(scene, camera);
 }
