@@ -1442,6 +1442,13 @@ function closeDetail() {
   renderTable();
 }
 
+// Lightweight reset used when un-hovering a map route — unlike closeDetail(),
+// this doesn't touch selRoute or trigger a table re-render.
+function showDetailEmpty() {
+  if (selRoute) { showDetail(selRoute); return; } // restore the real selection instead of clearing it
+  document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
+}
+
 // ── MOBILE FILTER SHEET ──
 function openFilterSheet() {
   document.getElementById('filters-panel').classList.add('mobile-sheet-open');
@@ -1979,15 +1986,24 @@ window.addEventListener('resize', positionSortIndicator);
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 const GLOBE_R = 5;
 const MAX_ARCS = 3000;
 const ACCENT_COLOR = 0xd97757;
 const GREEN_COLOR = 0x4cc98a;
 const AIRPORT_COLOR = 0xf0ede8;
+const HOVER_COLOR = 0xffa35c;
+const BASE_WIDTH = 2.2;
+const HOVER_WIDTH = 5;
 
 let scene, camera, renderer, controls, routeGroup, airportPoints;
 let initPromise = null, visible = false;
+let raycaster, arcLines = [], hoveredLine = null, pendingHoverCheck = false;
+const mouseNDC = new THREE.Vector2(-99, -99);
+const resolution = new THREE.Vector2();
 
 function latLonToVec3(lat, lon, radius) {
   const phi = (90 - lat) * Math.PI / 180;
@@ -2004,7 +2020,8 @@ function arcPoints(g1, g2, radius) {
   const end = latLonToVec3(g2[0], g2[1], radius);
   const angle = start.angleTo(end);
   const segments = angle > 0.4 ? 64 : 32;
-  const altitude = radius * (0.12 + 0.4 * (angle / Math.PI));
+  // Low, subtle bulge — closer to a real route-map arc than a tall loop
+  const altitude = radius * (0.035 + 0.14 * (angle / Math.PI));
   const pts = [];
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
@@ -2024,6 +2041,8 @@ function clearGroup(g) {
     if (obj.material) obj.material.dispose();
   }
   airportPoints = null;
+  arcLines = [];
+  hoveredLine = null;
 }
 
 function init() {
@@ -2039,6 +2058,7 @@ function init() {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(container.clientWidth || 300, container.clientHeight || 300, false);
+    resolution.set(renderer.domElement.width, renderer.domElement.height);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
@@ -2048,6 +2068,7 @@ function init() {
     controls.autoRotateSpeed = 0.4;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
+    controls.zoomSpeed = 0.4;   // default (1) feels like it snaps in on a single wheel tick
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const sun = new THREE.DirectionalLight(0xffffff, 1.1);
@@ -2077,6 +2098,10 @@ function init() {
     routeGroup = new THREE.Group();
     scene.add(routeGroup);
 
+    raycaster = new THREE.Raycaster();
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerleave', onPointerLeave);
+
     const loadingEl = document.getElementById('globe-loading');
     if (loadingEl) loadingEl.style.display = 'none';
 
@@ -2095,6 +2120,51 @@ function onResize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
+  resolution.set(renderer.domElement.width, renderer.domElement.height);
+  for (const line of arcLines) line.material.resolution.copy(resolution);
+}
+
+function onPointerMove(e) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  if (!pendingHoverCheck) {
+    pendingHoverCheck = true;
+    requestAnimationFrame(checkHover);
+  }
+}
+function onPointerLeave() {
+  mouseNDC.set(-99, -99);
+  if (!pendingHoverCheck) { pendingHoverCheck = true; requestAnimationFrame(checkHover); }
+}
+
+function setLineHovered(line, isHovered) {
+  const ud = line.userData;
+  line.material.color.set(isHovered ? HOVER_COLOR : ud.baseColor);
+  line.material.linewidth = isHovered ? HOVER_WIDTH : BASE_WIDTH;
+  line.material.opacity = isHovered ? Math.min(1, ud.baseOpacity + 0.35) : ud.baseOpacity;
+  line.renderOrder = isHovered ? 1 : 0;
+}
+
+function checkHover() {
+  pendingHoverCheck = false;
+  if (!renderer || !arcLines.length) return;
+  raycaster.setFromCamera(mouseNDC, camera);
+  raycaster.params.Line2 = { threshold: 0.02 };
+  const hits = raycaster.intersectObjects(arcLines, false);
+  const hit = hits.length ? hits[0].object : null;
+
+  if (hit === hoveredLine) return;
+  if (hoveredLine) setLineHovered(hoveredLine, false);
+  hoveredLine = hit;
+  renderer.domElement.style.cursor = hit ? 'pointer' : '';
+
+  if (hit) {
+    setLineHovered(hit, true);
+    if (typeof window.showDetail === 'function') window.showDetail(hit.userData.repFlight);
+  } else if (typeof window.showDetailEmpty === 'function') {
+    window.showDetailEmpty();
+  }
 }
 
 function animate() {
@@ -2109,6 +2179,7 @@ function update(rows) {
   clearGroup(routeGroup);
 
   const pairCounts = new Map();
+  const pairRep = new Map();
   const airports = new Map();
   let skipped = 0;
   for (const f of rows) {
@@ -2116,6 +2187,7 @@ function update(rows) {
     if (!g1 || !g2) { skipped++; continue; }
     const key = f.dep + '|' + f.arr;
     pairCounts.set(key, (pairCounts.get(key) || 0) + 1);
+    if (!pairRep.has(key)) pairRep.set(key, f);
     if (!airports.has(f.dep)) airports.set(f.dep, g1);
     if (!airports.has(f.arr)) airports.set(f.arr, g2);
   }
@@ -2130,14 +2202,27 @@ function update(rows) {
   for (const [key, count] of pairs) {
     const [dep, arr] = key.split('|');
     const pts = arcPoints(window.AIRPORT_GEO[dep], window.AIRPORT_GEO[arr], GLOBE_R);
+    const flat = [];
+    for (const p of pts) flat.push(p.x, p.y, p.z);
     const scenery = window.sceneryMatch(dep) || window.sceneryMatch(arr);
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat = new THREE.LineBasicMaterial({
-      color: scenery ? GREEN_COLOR : ACCENT_COLOR,
+    const baseColor = scenery ? GREEN_COLOR : ACCENT_COLOR;
+    const baseOpacity = Math.min(0.85, 0.32 + count * 0.04);
+
+    const geo = new LineGeometry();
+    geo.setPositions(flat);
+    const mat = new LineMaterial({
+      color: baseColor,
+      linewidth: BASE_WIDTH,
       transparent: true,
-      opacity: Math.min(0.85, 0.28 + count * 0.04),
+      opacity: baseOpacity,
+      worldUnits: false,
     });
-    routeGroup.add(new THREE.Line(geo, mat));
+    mat.resolution.copy(resolution);
+    const line = new Line2(geo, mat);
+    line.computeLineDistances();
+    line.userData = { dep, arr, count, repFlight: pairRep.get(key), baseColor, baseOpacity };
+    routeGroup.add(line);
+    arcLines.push(line);
   }
 
   const positions = [];
@@ -2175,6 +2260,8 @@ function show() {
 }
 function hide() {
   visible = false;
+  if (renderer) renderer.domElement.style.cursor = '';
+  if (hoveredLine) { setLineHovered(hoveredLine, false); hoveredLine = null; }
 }
 
 window.FSD_Globe = { init, update, show, hide };
