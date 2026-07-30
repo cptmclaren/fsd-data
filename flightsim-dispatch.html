@@ -1442,12 +1442,8 @@ function closeDetail() {
   renderTable();
 }
 
-// Lightweight reset used when un-hovering a map route — unlike closeDetail(),
-// this doesn't touch selRoute or trigger a table re-render.
-function showDetailEmpty() {
-  if (selRoute) { showDetail(selRoute); return; } // restore the real selection instead of clearing it
-  document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
-}
+// Exposes the current selection to the map module (a plain `let` isn't visible on window).
+function getSelRoute() { return selRoute; }
 
 // ── MOBILE FILTER SHEET ──
 function openFilterSheet() {
@@ -1995,13 +1991,15 @@ const MAX_ARCS = 3000;
 const ACCENT_COLOR = 0xd97757;
 const GREEN_COLOR = 0x4cc98a;
 const AIRPORT_COLOR = 0xf0ede8;
-const HOVER_COLOR = 0xffa35c;
+const SELECTED_COLOR = 0xffa35c;
 const BASE_WIDTH = 2.2;
-const HOVER_WIDTH = 5;
+const SELECTED_WIDTH = 5;
+const CLICK_DRAG_THRESHOLD = 5; // px — pointer moves beyond this = a rotate drag, not a click
 
 let scene, camera, renderer, controls, routeGroup, airportPoints;
 let initPromise = null, visible = false;
-let raycaster, arcLines = [], hoveredLine = null, pendingHoverCheck = false;
+let raycaster, arcLines = [], hoveredLine = null, selectedLine = null, pendingHoverCheck = false;
+let pointerDownPos = null;
 const mouseNDC = new THREE.Vector2(-99, -99);
 const resolution = new THREE.Vector2();
 
@@ -2043,6 +2041,7 @@ function clearGroup(g) {
   airportPoints = null;
   arcLines = [];
   hoveredLine = null;
+  selectedLine = null;
 }
 
 function init() {
@@ -2064,8 +2063,6 @@ function init() {
     controls.enablePan = false;
     controls.minDistance = 7;
     controls.maxDistance = 30;
-    controls.autoRotate = true;
-    controls.autoRotateSpeed = 0.4;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.zoomSpeed = 0.4;   // default (1) feels like it snaps in on a single wheel tick
@@ -2101,6 +2098,8 @@ function init() {
     raycaster = new THREE.Raycaster();
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerleave', onPointerLeave);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
 
     const loadingEl = document.getElementById('globe-loading');
     if (loadingEl) loadingEl.style.display = 'none';
@@ -2137,13 +2136,51 @@ function onPointerLeave() {
   mouseNDC.set(-99, -99);
   if (!pendingHoverCheck) { pendingHoverCheck = true; requestAnimationFrame(checkHover); }
 }
+function onPointerDown(e) {
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+}
+function onPointerUp(e) {
+  if (!pointerDownPos) return;
+  const dx = e.clientX - pointerDownPos.x, dy = e.clientY - pointerDownPos.y;
+  pointerDownPos = null;
+  if (Math.hypot(dx, dy) > CLICK_DRAG_THRESHOLD) return; // it was a rotate-drag, not a click
+  handleClick(e);
+}
 
-function setLineHovered(line, isHovered) {
+function pickLineAt(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1
+  );
+  raycaster.setFromCamera(ndc, camera);
+  raycaster.params.Line2 = { threshold: 0.02 };
+  const hits = raycaster.intersectObjects(arcLines, false);
+  return hits.length ? hits[0].object : null;
+}
+
+function handleClick(e) {
+  const hit = pickLineAt(e.clientX, e.clientY);
+  if (hit) {
+    if (typeof window.selectRoute === 'function') window.selectRoute(hit.userData.repFlight);
+  } else if (typeof window.closeDetail === 'function') {
+    window.closeDetail();
+  }
+}
+
+// Subtle affordance only — the bold "selected" look is reserved for a click (see setLineSelected).
+function setLineHoverAffordance(line, isHovered) {
+  if (line === selectedLine) return; // selection styling takes priority
   const ud = line.userData;
-  line.material.color.set(isHovered ? HOVER_COLOR : ud.baseColor);
-  line.material.linewidth = isHovered ? HOVER_WIDTH : BASE_WIDTH;
-  line.material.opacity = isHovered ? Math.min(1, ud.baseOpacity + 0.35) : ud.baseOpacity;
-  line.renderOrder = isHovered ? 1 : 0;
+  line.material.opacity = isHovered ? Math.min(1, ud.baseOpacity + 0.2) : ud.baseOpacity;
+}
+
+function setLineSelected(line, isSelected) {
+  const ud = line.userData;
+  line.material.color.set(isSelected ? SELECTED_COLOR : ud.baseColor);
+  line.material.linewidth = isSelected ? SELECTED_WIDTH : BASE_WIDTH;
+  line.material.opacity = isSelected ? 1 : ud.baseOpacity;
+  line.renderOrder = isSelected ? 1 : 0;
 }
 
 function checkHover() {
@@ -2155,16 +2192,10 @@ function checkHover() {
   const hit = hits.length ? hits[0].object : null;
 
   if (hit === hoveredLine) return;
-  if (hoveredLine) setLineHovered(hoveredLine, false);
+  if (hoveredLine) setLineHoverAffordance(hoveredLine, false);
   hoveredLine = hit;
   renderer.domElement.style.cursor = hit ? 'pointer' : '';
-
-  if (hit) {
-    setLineHovered(hit, true);
-    if (typeof window.showDetail === 'function') window.showDetail(hit.userData.repFlight);
-  } else if (typeof window.showDetailEmpty === 'function') {
-    window.showDetailEmpty();
-  }
+  if (hit) setLineHoverAffordance(hit, true);
 }
 
 function animate() {
@@ -2252,6 +2283,14 @@ function update(rows) {
       (truncated ? `<br>showing top ${MAX_ARCS.toLocaleString()} busiest routes` : '') +
       (skipped ? `<br>${skipped.toLocaleString()} flights missing coordinates` : '');
   }
+
+  // Rebuilding arcs wipes any prior selection style — reapply it if the
+  // globally-selected route (set via click) is still present in this arc set.
+  const sel = typeof window.getSelRoute === 'function' ? window.getSelRoute() : null;
+  if (sel) {
+    const match = arcLines.find(l => l.userData.dep === sel.dep && l.userData.arr === sel.arr);
+    if (match) { selectedLine = match; setLineSelected(match, true); }
+  }
 }
 
 function show() {
@@ -2261,7 +2300,7 @@ function show() {
 function hide() {
   visible = false;
   if (renderer) renderer.domElement.style.cursor = '';
-  if (hoveredLine) { setLineHovered(hoveredLine, false); hoveredLine = null; }
+  if (hoveredLine) { setLineHoverAffordance(hoveredLine, false); hoveredLine = null; }
 }
 
 window.FSD_Globe = { init, update, show, hide };
