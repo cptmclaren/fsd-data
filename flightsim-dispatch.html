@@ -28,6 +28,7 @@
   --accent-dim2:rgba(217,119,87,0.08);
   --green:  #5fad7e;
   --green-dim: rgba(95,173,126,0.12);
+  --green-bright: #4cc98a;
   --amber:  #c9a227;
   --amber-dim: rgba(201,162,39,0.12);
   --blue:   #7fa8d4;
@@ -193,7 +194,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 .badge-s { background:rgba(201,162,39,.15); color:#e0b84a; border-color:rgba(201,162,39,.3); }
 .badge-w { background:rgba(127,168,212,.12); color:#8bbfe0; border-color:rgba(127,168,212,.28); }
 .badge-cargo { background:rgba(201,162,39,.12); color:#c9a227; border-color:rgba(201,162,39,.28); }
-.td-scenery { background:rgba(95,173,126,.28); border-radius:6px; }
+.icao-scenery { color:var(--green-bright); }
 
 /* ── BOTTOMBAR ── */
 .bottombar { display:flex; gap:8px; padding:7px 12px; border-top:1px solid var(--border2); background:var(--bg2); flex-shrink:0; align-items:center; }
@@ -325,7 +326,6 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 .mcard-route { display:flex; align-items:center; gap:8px; }
 .mcard-ap { display:flex; flex-direction:column; font-size:16px; font-weight:600; color:var(--text); min-width:0; }
 .mcard-ap-r { align-items:flex-end; }
-.mcard-ap-scenery { background:rgba(95,173,126,.28); border-radius:6px; padding:3px 8px; margin:-3px -8px; }
 .mcard-city { font-size:10px; font-weight:400; color:var(--text3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:110px; }
 .mcard-arrow { flex:1; text-align:center; color:var(--text3); font-size:13px; }
 .mcard-ac { font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -458,6 +458,22 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
             </div>
             <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">Arrival ICAO (comma-separated for multiple)</div>
             <input type="text" id="arr" placeholder="e.g. KMIA" oninput="queueRender()">
+          </div>
+        </div>
+
+        <!-- MSFS2024 scenery filter -->
+        <div class="fg">
+          <label class="flabel-checkbox">
+            <input type="checkbox" id="scenery-filter" onchange="toggleSceneryFilter()">
+            MSFS2024 Scenery
+          </label>
+          <div id="scenery-subfields" style="display:none;margin-top:4px;gap:10px;">
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+              <input type="checkbox" id="scenery-native" checked onchange="queueRender()"> Native
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+              <input type="checkbox" id="scenery-compatible" checked onchange="queueRender()"> Compatible
+            </label>
           </div>
         </div>
 
@@ -680,8 +696,10 @@ const AC_MAP = {};
 const CITY_MAP = {};
 
 // ── EMBEDDED DATA ──
-// ICAO codes with installed scenery — dep/arr cells matching these get a green highlight
-const SCENERY_ICAO = new Set(["1B2","1G4","1S2","1WA6","3W5","41CA","42HB","58CA","67FL","74S","85U","8AK5","AGGN","BGAA","BGGH","BGKK","BGMQ","BGSF","BGSS","BGUQ","BIAR","BIEG","BIIS","BIKF","BIRK","BKPR","C48","CDK2","CMB2","CML9","CRL2","CYAW","CYCG","CYCX","CYDF","CYEG","CYEU","CYFB","CYFC","CYGK","CYGR","CYGZ","CYHM","CYHZ","CYKA","CYKZ","CYLT","CYMM","CYOA","CYOO","CYOW","CYPR","CYQB","CYQM","CYQQ","CYQR","CYQT","CYQU","CYQX","CYRO","CYRT","CYRV","CYSE","CYSJ","CYUL","CYVP","CYVQ","CYVR","CYWG","CYXC","CYXE","CYXJ","CYXS","CYXT","CYXY","CYYC","CYYG","CYYJ","CYYR","CYYT","CYYZ","CYZF","CZB2","CZBF","DAAG","DAAT","DABC","DATG","DGAA","DNBE","DTKA","DTMB","DTNH","DTTA","DTTJ","DTTX","DTTZ","EBBR","EBCI","EBLG","EDAZ","EDDB","EDDC","EDDF","EDDG","EDDH","EDDK","EDDL","EDDM","EDDN","EDDP","EDDR","EDDS","EDDV","EDDW","EDFH","EDJA","EDLV","EDLW","EDNL","EDWQ","EDXW","EETN","EFHK","EFIV","EFKS","EFKT","EFOU","EFRO","EFTU","EGAA","EGAC","EGAE","EGBB","EGBM","EGBO","EGBT","EGCC","EGCL","EGCW","EGEP","EGEW","EGFE","EGFF","EGFH","EGGD","EGGP","EGGW","EGHA","EGHC","EGHE","EGHF","EGHH","EGHI","EGHJ","EGHN","EGHO","EGHP","EGHQ","EGHR","EGJB","EGJJ","EGKA","EGKB","EGKH","EGKK","EGKR","EGLA","EGLC","EGLD","EGLF","EGLK","EGLL","EGLM","EGMC","EGMD","EGML","EGMT","EGNC","EGNE","EGNF","EGNJ","EGNM","EGNS","EGNT","EGNV","EGNW","EGNX","EGPD","EGPE","EGPF","EGPH","EGPK","EGPN","EGPO","EGSG","EGSH","EGSL","EGSP","EGSR","EGSS","EGSX","EGTB","EGTF","EGTH","EGTK","EGTO","EGUL","EGXC","EGZK","EGZY","EHAM","EHBK","EHLE","EHRD","EHSE","EICK","EIDW","EIKN","EIKY","EINN","EK76","EKAH","EKBI","EKCH","EKRN","EKSB","EKSN","EKYT","ELLX","ENAL","ENAT","ENBR","ENEV","ENFL","ENGM","ENHD","ENHF","ENKB","ENML","ENNO","ENSB","ENSD","ENSG","ENTC","ENTO","ENVA","EPBY","EPGD","EPKK","EPKT","EPLB","EPLL","EPMO","EPPO","EPRZ","EPSC","EPSY","EPWA","EPWR","EPZG","ESGG","ESMS","ESOE","ESOK","ESOW","ESSA","EVRA","EVVA","EYKA","EYPA","EYVI","F62","FACT","FAEL","FAGG","FAGM","FAKM","FAOR","FAPN","FASH","FASP","FASS","FATP","FAVG","FAWB","FAWN","FAYP","FBSK","FLHN","FMCZ","FMEE","FMMI","FNBJ","FVFA","FYWB","FYWH","FZAA","GCHI","GCRR","GCTS","GCXO","GLRB","GMAD","GMFB","GMFF","GMMN","GMMX","GMTT","GOBD","GVAC","HAAB","HECA","HEGN","HEMA","HESH","HKJK","HKMO","HLLB","HLLT","HRYR","HTKJ","HTZA","I08","ID74","ID8","IDDM","IDSM","IDVN","KABQ","KAMA","KARR","KASE","KATL","KATW","KAUS","KBAB","KBCE","KBCT","KBDL","KBFI","KBHM","KBLI","KBNA","KBOI","KBOS","KBRO","KBUF","KBWI","KBZN","KCAE","KCAK","KCDK","KCDW","KCHS","KCLT","KCLW","KCMI","KCMR","KCOS","KCRP","KCRQ","KCRW","KCVG","KDAL","KDCA","KDEN","KDFW","KDPA","KDTS","KDTW","KDYT","KEGE","KEWR","KEYW","KFAT","KFAY","KFFZ","KFLG","KFLL","KFNT","KGPT","KGRB","KGSP","KGYY","KHDN","KHND","KHOU","KHPN","KHRL","KHTS","KHVN","KIAD","KIAH","KIND","KISP","KJAC","KJAN","KJAX","KJFK","KLAS","KLAX","KLBB","KLGA","KLGB","KLIT","KLSV","KLVB","KLYH","KMAF","KMCI","KMDT","KMDW","KMEM","KMFE","KMHT","KMIA","KMNE","KMSP","KMSY","KMTH","KMVY","KMYL","KMYR","KNKX","KOAK","KOKC","KOMA","KONT","KOPF","KORD","KORF","KORH","KORS","KPAE","KPAO","KPBI","KPCM","KPDX","KPHF","KPHL","KPHX","KPIE","KPSP","KPVD","KPVU","KPWK","KPWM","KRDD","KRDU","KRFD","KRIC","KRNT","KROC","KRSW","KRVS","KSAN","KSAT","KSAV","KSDF","KSEA","KSFB","KSFO","KSGF","KSGU","KSJC","KSLC","KSMF","KSMO","KSNA","KSPI","KSQL","KSRQ","KSTL","KSYR","KTBR","KTEB","KTEX","KTNP","KTPA","KTPF","KTRK","KTTN","KTUL","KTUS","KTVC","KTYQ","KVCV","KVPS","LAKU","LATI","LBBG","LBSF","LBWN","LCLK","LCPH","LDDU","LDRI","LDSP","LDZA","LEAL","LEAP","LEBB","LEBL","LECD","LEDA","LEGE","LEIB","LEIG","LEJR","LELL","LEMD","LEMG","LEMH","LEMI","LEPP","LESO","LESU","LETL","LEVT","LEVX","LEXJ","LEZL","LFAC","LFBD","LFBI","LFBO","LFBP","LFBR","LFBT","LFBZ","LFCR","LFEC","LFEQ","LFFK","LFFO","LFHU","LFHY","LFJB","LFJL","LFKB","LFKC","LFKF","LFKJ","LFKO","LFKX","LFLB","LFLC","LFLL","LFLS","LFMA","LFMD","LFMK","LFML","LFMN","LFMP","LFMQ","LFMT","LFMV","LFNA","LFNC","LFOB","LFPL","LFPO","LFQA","LFQI","LFQQ","LFRB","LFRG","LFRK","LFRN","LFRS","LFSB","LFSC","LFST","LFTZ","LFVP","LGAV","LGHI","LGIR","LGKC","LGKF","LGKL","LGKO","LGKP","LGKR","LGKV","LGKY","LGLE","LGMK","LGMT","LGNX","LGPA","LGPZ","LGRP","LGSA","LGSM","LGSR","LGST","LGTS","LGZA","LHBP","LIBC","LIBD","LIBF","LIBR","LICA","LICB","LICC","LICD","LICG","LICJ","LICR","LICT","LIEE","LIMC","LIME","LIMF","LIML","LIMP","LIMW","LIMZ","LIPH","LIPK","LIPQ","LIPR","LIPX","LIPY","LIPZ","LIRA","LIRF","LIRI","LIRN","LIRP","LIRQ","LJBO","LJLJ","LJMB","LKMT","LKPD","LKPR","LKTB","LMML","LOAN","LOAV","LOWG","LOWI","LOWL","LOWS","LPFR","LPHR","LPMA","LPPD","LPPR","LPPT","LQSA","LRIA","LROP","LRTR","LSGC","LSGG","LSGL","LSGR","LSGS","LSGY","LSPL","LSPN","LSPU","LSPV","LSPW","LSTS","LSZB","LSZC","LSZE","LSZF","LSZH","LSZI","LSZK","LSZL","LSZM","LSZP","LSZQ","LSZR","LSZS","LSZT","LSZU","LSZX","LTAC","LTAF","LTAI","LTAL","LTBJ","LTBS","LTCG","LTFE","LTFG","LTFJ","LTFM","LUKK","LWOH","LXGB","LYBE","LYTV","LZIB","LZKZ","LZPP","LZZI","MDLR","MDPP","MDSD","MGGT","MMCZ","MMMD","MMMX","MMOX","MMTL","MPBO","MPSM","MPTO","MROC","MUHA","MWCR","MYAM","MYCC","MYNN","NCRG","NFFN","NSAS","NSFA","NSFQ","NTAA","NTTH","NTTM","NWWW","NZAA","NZCH","NZDN","NZGT","NZHK","NZMC","NZMF","NZNS","NZNV","NZPM","NZQN","NZTG","NZTI","NZWF","NZWN","O54","OBBI","OEAB","OEAO","OEDF","OEJN","OEMA","OENN","OERK","OG31","OIBK","OINN","OINR","OJAI","OJAQ","OLBA","OMAA","OMDB","OMDU","OMRK","OMSJ","OOMS","OOSA","OPGD","OPIS","OPKC","OPSD","ORBI","ORMM","OTHB","OTHH","PACV","PAEN","PAJN","PAKT","PAKW","PANC","PAOM","PAPG","PASI","PATK","PAWD","PAWG","PAYA","PHDH","PHHN","PHJH","PHLI","PHLU","PHMK","PHMU","PHNL","PHNY","PHOG","PHPA","PHTO","RCCM","RCFN","RCGI","RCKH","RCKW","RCLY","RCQC","RCSS","RCTP","RCWA","RJAA","RJBB","RJCN","RJCW","RJEO","RJFC","RJFF","RJFK","RJFM","RJFR","RJFS","RJFT","RJKA","RJKI","RJNS","RJOA","RJOK","RJSA","RKJB","RKJY","RKPC","RKPK","RKSI","RKSS","RKTN","RKTU","ROAH","ROKJ","RPLC","RPLL","RPMD","RPME","RPMG","RPMP","RPMR","RPMZ","RPVE","RPVM","RPVP","S45","SABE","SACO","SAME","SANT","SARC","SARI","SASA","SASJ","SAVC","SAVE","SAVT","SAVV","SAWC","SAWE","SAWG","SAWH","SAWP","SAZB","SAZM","SAZN","SAZS","SAZY","SBAR","SBAU","SBCG","SBCY","SBFN","SBGR","SBJH","SBMT","SBPK","SBRB","SBRF","SBRJ","SBSM","SBSP","SBSV","SCAR","SCAS","SCBA","SCCI","SCCY","SCDA","SCEL","SCIE","SCIP","SCJO","SCNT","SCQP","SCTE","SCVD","SDDR","SDLP","SKAR","SKBO","SKCC","SKCG","SKCL","SKCZ","SKEJ","SKFL","SKGI","SKGO","SKGY","SKIB","SKIP","SKMD","SKMZ","SKNQ","SKNV","SKPE","SKPP","SKPQ","SKRG","SKSP","SKUC","SKUI","SKVG","SKVV","SLLP","SNDV","SNGI","SNPJ","SOCA","SPJL","SPQU","SPRU","SPZO","SULS","TBPB","TDPD","TFFA","TFFG","TFFJ","TFFM","TFFR","TGPY","TIST","TJCP","TJIG","TJPS","TJSJ","TKPK","TLPC","TLPL","TNCA","TNCB","TNCC","TQPF","TRPG","TUPJ","TVSA","TXKF","UAAA","UACC","UAIT","UASK","UATE","UBBB","UDYZ","UEEE","UGSB","UHBB","UHMP","UHPP","UHSH","UHWK","UHWW","UKBB","UKLL","UKOO","ULLI","ULLY","ULMM","UMMS","UNKL","UNNT","UNOO","UNTT","URMM","URSS","URWW","USCC","USPP","UTAA","UTDD","UUDD","UUEE","UUWW","VABB","VCBI","VDPP","VEBD","VGHS","VHHH","VHHZ","VIDP","VIJP","VLLB","VMMC","VNKL","VNLK","VNPL","VNSB","VOBL","VOBZ","VOCI","VOCL","VQPR","VRMM","VTBD","VTBS","VTCL","VTCN","VTCT","VTPM","VTPT","VTSG","VTSM","VTSP","VTSY","VTUI","VTUL","VTUU","VTUW","VVTS","WAAA","WAMM","WARA","WARR","WATE","WAWP","WAWW","WBGB","WBGG","WBGR","WBKK","WBKL","WBKW","WBSB","WICC","WIDD","WIGG","WIKK","WILL","WMKA","WMKC","WMKI","WMKJ","WMKK","WMKL","WMKN","WMKP","WMSA","WSSL","WSSS","YAYE","YBAS","YBBN","YBCS","YBDG","YBHM","YBMA","YBMK","YBNA","YBRK","YBSU","YBTL","YBUD","YBWW","YCBG","YCFS","YEML","YGLA","YHOT","YLHI","YMEN","YMHB","YMLT","YMML","YMND","YPAD","YPDN","YPKA","YPLC","YPPF","YPPH","YSBK","YSCB","YSPT","YSSY","YSTH","YSWS","ZBAA","ZBAD","ZBTJ","ZGGG","ZGSD","ZHCC","ZJSY","ZPPP","ZSFZ","ZSHC","ZSNJ","ZSPD","ZSQD","ZSSS","ZSWX","ZSWZ","ZUGY","ZULS","ZUTF"]);
+// ICAO codes with installed scenery, split by MSFS2024 compatibility tag.
+// A code can appear in both sets if different vendors cover it differently.
+const NATIVE_ICAO = new Set(["1B2","1G4","1S2","1WA6","3W5","41CA","42HB","58CA","67FL","74S","85U","8AK5","BGGH","BGKK","BIIS","C48","CDK2","CMB2","CML9","CRL2","CYAW","CYCG","CYCX","CYDF","CYEG","CYEU","CYFB","CYFC","CYGK","CYGR","CYGZ","CYHM","CYHZ","CYKA","CYLT","CYMM","CYOA","CYOW","CYPR","CYQM","CYQQ","CYQR","CYQT","CYQU","CYQX","CYRO","CYRT","CYRV","CYSE","CYSJ","CYVP","CYVQ","CYWG","CYXC","CYXE","CYXJ","CYXS","CYXT","CYXY","CYYC","CYYG","CYYJ","CYYR","CYYT","CYYZ","CZB2","CZBF","DTKA","DTMB","DTTJ","DTTX","DTTZ","EBCI","EDAZ","EDDB","EDDC","EDDL","EDDS","EDDV","EDDW","EDLW","EDWQ","EDXW","EFKT","EFRO","EGBM","EGBO","EGBT","EGCC","EGCL","EGCW","EGEP","EGEW","EGGD","EGGP","EGGW","EGHA","EGHF","EGHJ","EGHN","EGHO","EGHP","EGHR","EGJB","EGKA","EGKH","EGKK","EGKR","EGLA","EGLC","EGLD","EGLF","EGLL","EGLM","EGMD","EGML","EGMT","EGNE","EGNF","EGNM","EGNT","EGNW","EGPO","EGSG","EGSL","EGSP","EGSR","EGSS","EGSX","EGTF","EGTH","EGTO","EGZK","EGZY","EK76","EKAH","EKBI","EKCH","EKRN","EKSB","EKYT","ELLX","ENAL","ENBR","ENGM","ENHD","ENHF","ENML","ENNO","ENSB","ENSD","ENSG","ENTO","ESSA","EYKA","F62","FACT","FAOR","FMCZ","FMEE","FNBJ","FVFA","FZAA","GCRR","GMAD","GMFF","GOBD","GVAC","HECA","HEGN","HEMA","HKMO","HLLB","HLLT","I08","ID74","ID8","IDDM","IDSM","IDVN","KATL","KBAB","KBHM","KBNA","KCAE","KCAK","KCMR","KDEN","KDFW","KDTS","KEYW","KFLL","KHPN","KHTS","KHVN","KIAD","KJFK","KLAS","KLAX","KLGB","KLVB","KMCI","KMEM","KMIA","KMVY","KMYL","KORD","KORS","KPDX","KPHX","KPSP","KPVD","KRFD","KROC","KRVS","KSAN","KSFO","KSGU","KSJC","KTNP","KTUL","LCLK","LDRI","LDSP","LEIB","LFBD","LFBI","LFBZ","LFKJ","LFKX","LFMN","LFMT","LFRB","LFTZ","LFVP","LGIR","LGKO","LGKR","LGMK","LGRP","LGSA","LGSR","LGZA","LHBP","LIMC","LIMW","LIPZ","LIRF","LIRQ","LJBO","LKPD","LKTB","LOWI","LPPD","LPPR","LQSA","LROP","LSGC","LSGS","LSGY","LSPL","LSPN","LSPV","LSPW","LSZC","LSZE","LSZF","LSZK","LSZL","LSZQ","LSZR","LSZS","LSZU","LTFJ","LZIB","MDLR","MGGT","MMCZ","MMMX","MMTL","MPTO","MROC","MYNN","NWWW","NZCH","NZGT","NZMC","NZMF","NZNS","NZTG","NZWF","O54","OEJN","OG31","OMDB","OMDU","ORMM","OTHB","OTHH","PAKT","RCKH","RCSS","RCTP","RJNS","S45","SABE","SAVV","SBGR","SBMT","SBPK","SBSP","SCAR","SKBO","SKMD","SKVV","SLLP","SOCA","SPJL","SPQU","SPRU","SPZO","TBPB","TFFG","TFFJ","TJCP","TJPS","TJSJ","TRPG","UDYZ","UEEE","UHWW","ULLY","UNOO","UNTT","URMM","USCC","VHHH","VHHZ","VLLB","VMMC","VNKL","VNLK","VNPL","VNSB","VOBL","VRMM","WSSS","YBBN","YCBG","YHOT","YMHB","YMML","YMND","YPAD","YPPF","YPPH","ZHCC"]);
+const COMPATIBLE_ICAO = new Set(["07FA","08R","17FL","1AA0","24A","2NC0","3B5","80TN","9NM9","AGGN","BGAA","BGMQ","BGSF","BGSS","BGUQ","BIAR","BIEG","BIKF","BIRK","BKPR","C16","CNC3","CYKZ","CYOO","CYOW","CYQB","CYUL","CYVR","CYYC","CYYJ","CYZF","DAAG","DAAT","DABC","DATG","DGAA","DNBE","DTNH","DTTA","EBBR","EBLG","EDDC","EDDF","EDDG","EDDH","EDDK","EDDL","EDDM","EDDN","EDDP","EDDR","EDDS","EDDV","EDDW","EDFH","EDJA","EDLV","EDNL","EETN","EFHK","EFIV","EFKS","EFOU","EFTU","EGAA","EGAC","EGAE","EGBB","EGCC","EGFE","EGFF","EGFH","EGGD","EGGP","EGGW","EGHC","EGHE","EGHH","EGHI","EGHQ","EGJB","EGJJ","EGKB","EGLC","EGLK","EGMC","EGNC","EGNJ","EGNM","EGNS","EGNV","EGNX","EGPD","EGPE","EGPF","EGPH","EGPK","EGPN","EGSH","EGTB","EGTK","EGUL","EGXC","EHAM","EHBK","EHLE","EHRD","EHSE","EICK","EIDW","EIKN","EIKY","EINN","EKCH","EKSN","ENAT","ENBR","ENEV","ENFL","ENGM","ENKB","ENTC","ENVA","EPBY","EPGD","EPKK","EPKT","EPLB","EPLL","EPMO","EPPO","EPRZ","EPSC","EPSY","EPWA","EPWR","EPZG","ESGG","ESKS","ESMS","ESNQ","ESNU","ESOE","ESOK","ESOW","EVRA","EVVA","EYKA","EYPA","EYVI","FA54","FAEL","FAGG","FAGM","FAKM","FAOR","FAPN","FASH","FASP","FASS","FATP","FAVG","FAWB","FAWN","FAYP","FBSK","FD48","FIMP","FLHN","FMMI","FSIA","FSPP","FYWB","FYWH","GCHI","GCTS","GCXO","GLRB","GMFB","GMMN","GMMX","GMTT","HAAB","HAL1","HECA","HEGN","HEMA","HESH","HI01","HKJK","HRYR","HTKJ","HTZA","KABQ","KAMA","KARR","KASE","KATW","KAUS","KBCE","KBCT","KBDL","KBFI","KBLI","KBNA","KBOI","KBOS","KBRO","KBUF","KBWI","KBZN","KCDK","KCDW","KCHS","KCLT","KCLW","KCMI","KCOS","KCRP","KCRQ","KCRW","KCVG","KDAL","KDCA","KDEN","KDPA","KDTW","KDYT","KEGE","KEWR","KEYW","KFAT","KFAY","KFFZ","KFLG","KFLL","KFNT","KGPT","KGRB","KGSP","KGYY","KHDN","KHND","KHOU","KHRL","KIAD","KIAH","KIND","KISP","KJAC","KJAN","KJAX","KLAX","KLBB","KLGA","KLIT","KLSV","KLYH","KMAF","KMDT","KMDW","KMFE","KMHT","KMIA","KMNE","KMSP","KMSY","KMTH","KMYR","KNKX","KOAK","KOKC","KOMA","KONT","KOPF","KORD","KORF","KORH","KPAE","KPAO","KPBI","KPCM","KPHF","KPHL","KPIE","KPSP","KPVD","KPVU","KPWK","KPWM","KRDD","KRDU","KRIC","KRNT","KRSW","KSAN","KSAT","KSAV","KSDF","KSEA","KSFB","KSGF","KSLC","KSMF","KSMO","KSNA","KSPI","KSQL","KSRQ","KSTL","KSYR","KTBR","KTEB","KTEX","KTPA","KTPF","KTRK","KTTN","KTUS","KTVC","KTYQ","KVCV","KVPS","L35","LAKU","LATI","LBBG","LBSF","LBWN","LCLK","LCPH","LDDU","LDRI","LDZA","LEAL","LEAP","LEBB","LEBL","LECD","LEDA","LEGE","LEIB","LEIG","LEJR","LELL","LEMD","LEMG","LEMH","LEMI","LEPP","LESO","LESU","LETL","LEVT","LEVX","LEXJ","LEZL","LFAC","LFBD","LFBO","LFBP","LFBR","LFBT","LFBZ","LFCR","LFEC","LFEQ","LFFK","LFFO","LFHU","LFHY","LFJB","LFJL","LFKB","LFKC","LFKF","LFKJ","LFKO","LFLB","LFLC","LFLL","LFLS","LFMA","LFMD","LFMK","LFML","LFMP","LFMQ","LFMT","LFMV","LFNA","LFNC","LFOB","LFPL","LFPO","LFQA","LFQI","LFQQ","LFRB","LFRG","LFRK","LFRN","LFRS","LFSB","LFSC","LFST","LGAV","LGHI","LGIR","LGKC","LGKF","LGKL","LGKP","LGKV","LGKY","LGLE","LGMT","LGNX","LGPA","LGPZ","LGRD","LGRP","LGSM","LGSR","LGST","LGTS","LIBC","LIBD","LIBF","LIBR","LICA","LICB","LICC","LICD","LICG","LICJ","LICR","LICT","LIEE","LIMC","LIME","LIMF","LIML","LIMP","LIMZ","LIPH","LIPK","LIPQ","LIPR","LIPX","LIPY","LIRA","LIRI","LIRN","LIRP","LJLJ","LJMB","LKMT","LKPD","LKPR","LMML","LOAN","LOAV","LOWG","LOWL","LOWS","LPFR","LPHR","LPMA","LPPR","LPPT","LQSA","LRIA","LRTR","LSGG","LSGL","LSGR","LSGS","LSPU","LSPV","LSTS","LSZB","LSZE","LSZH","LSZI","LSZM","LSZP","LSZT","LSZX","LTAC","LTAF","LTAI","LTAL","LTBJ","LTBS","LTCG","LTFE","LTFG","LTFM","LUKK","LWOH","LXGB","LYBE","LYTV","LZKZ","LZPP","LZZI","MDPP","MDSD","MMMD","MMOX","MPBO","MPSM","MPTO","MROC","MUHA","MWCR","MYAM","MYCC","NCRG","NFFN","NSAS","NSFA","NSFQ","NTAA","NTTH","NTTM","NZAA","NZDN","NZHK","NZNV","NZPM","NZQN","NZTI","NZWN","OBBI","OEAB","OEAO","OEDF","OEJN","OEMA","OENN","OERK","OIBK","OINN","OINR","OJAI","OJAQ","OLBA","OMAA","OMRK","OMSJ","OOMS","OOSA","OPGD","OPIS","OPKC","OPSD","ORBI","OTHH","PACV","PAEN","PAJN","PAKT","PAKW","PANC","PAOM","PAPG","PASI","PATK","PAWD","PAWG","PAYA","PHDH","PHHN","PHJH","PHLI","PHLU","PHMK","PHMU","PHNL","PHNY","PHOG","PHPA","PHTO","RCCM","RCFN","RCGI","RCKW","RCLY","RCQC","RCTP","RCWA","RJAA","RJBB","RJCN","RJCW","RJEO","RJFC","RJFF","RJFK","RJFM","RJFR","RJFS","RJFT","RJKA","RJKI","RJOA","RJOK","RJSA","RKJB","RKJY","RKPC","RKPK","RKSI","RKSS","RKTN","RKTU","ROAH","ROKJ","RPLC","RPLL","RPMD","RPME","RPMG","RPMP","RPMR","RPMZ","RPVE","RPVM","RPVP","S20","SACO","SAME","SANT","SARC","SARI","SASA","SASJ","SAVC","SAVE","SAVT","SAWC","SAWE","SAWG","SAWH","SAWP","SAZB","SAZM","SAZN","SAZS","SAZY","SBAR","SBAU","SBCG","SBCY","SBFN","SBJH","SBRB","SBRF","SBRJ","SBSM","SBSV","SCAS","SCBA","SCCI","SCCY","SCDA","SCEL","SCIE","SCIP","SCJO","SCNT","SCQP","SCTE","SCVD","SDDR","SDLP","SKAR","SKBO","SKCC","SKCG","SKCL","SKCZ","SKEJ","SKFL","SKGI","SKGO","SKGY","SKIB","SKIP","SKMZ","SKNQ","SKNV","SKPE","SKPP","SKPQ","SKRG","SKSP","SKUC","SKUI","SKVG","SLSU","SNDV","SNGI","SNPJ","SPJC","SULS","TBPB","TDPD","TFFA","TFFM","TFFR","TGPY","TIST","TJIG","TJSJ","TKPK","TLPC","TLPL","TNCA","TNCB","TNCC","TQPF","TUPJ","TVSA","TXKF","UAAA","UACC","UAIT","UASK","UATE","UBBB","UGSB","UHBB","UHMP","UHPP","UHSH","UHWK","UHWW","UKBB","UKLL","UKOO","ULLI","ULMM","UMMS","UNKL","UNNT","UNTT","URSS","URWW","USPP","UTAA","UTDD","UUDD","UUEE","UUWW","VABB","VCBI","VDPP","VEBD","VGHS","VHHH","VIDP","VIJP","VOBL","VOBZ","VOCI","VOCL","VQPR","VRMM","VTBD","VTBS","VTCL","VTCN","VTCT","VTPM","VTPT","VTSG","VTSM","VTSP","VTSY","VTUI","VTUL","VTUU","VTUW","VVTS","W24","WAAA","WAMM","WARA","WARR","WATE","WAWP","WAWW","WBGB","WBGG","WBGR","WBKK","WBKL","WBKW","WBSB","WICC","WIDD","WIGG","WIKK","WILL","WMKA","WMKC","WMKI","WMKJ","WMKK","WMKL","WMKN","WMKP","WMSA","WSSL","WSSS","X01","X06","YAYE","YBAS","YBCS","YBDG","YBHM","YBMA","YBMK","YBNA","YBRK","YBSU","YBTL","YBUD","YBWW","YCFS","YEML","YGLA","YLHI","YMEN","YMHB","YMLT","YPAD","YPDN","YPKA","YPLC","YPPH","YSBK","YSCB","YSPT","YSSY","YSTH","YSWS","ZBAA","ZBAD","ZBTJ","ZGGG","ZGSD","ZHHH","ZJHK","ZJSY","ZKPY","ZPPP","ZSAM","ZSFZ","ZSHC","ZSNJ","ZSPD","ZSQD","ZSSS","ZSWX","ZSWZ","ZUCK","ZUGY","ZULS","ZUTF","ZYHB"]);
 
 // ── STATE ──
 let DB = [];
@@ -857,12 +875,15 @@ function getFilters() {
     departsEnable: document.getElementById('departs-enable').checked,
     departsLo: parseInt(document.getElementById('departs-lo').value) || 0,
     departsHi: parseInt(document.getElementById('departs-hi').value) || 60,
+    sceneryEnable: document.getElementById('scenery-filter').checked,
+    sceneryNative: document.getElementById('scenery-native').checked,
+    sceneryCompatible: document.getElementById('scenery-compatible').checked,
   };
 }
 
 function hasActiveFilters(fi) {
   const sliderDefault = fi.durLo === 0 && fi.durHi === 22*60 && fi.yrLo === 1950 && fi.yrHi === 2024;
-  const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && !fi.departsEnable;
+  const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && !fi.departsEnable && !fi.sceneryEnable;
   const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamilies.length && qs.yearLo === null && qs.durHi === null;
   return !(noManual && noQS);
 }
@@ -926,7 +947,20 @@ function matchesFilters(f, fi) {
     const diff = (dt - nowMins + 1440) % 1440;
     if (diff < fi.departsLo || diff > fi.departsHi) return false;
   }
+  // MSFS2024 scenery filter — show if dep OR arr has scenery in an enabled category
+  if (fi.sceneryEnable) {
+    const depMatch = (fi.sceneryNative && NATIVE_ICAO.has(f.dep)) || (fi.sceneryCompatible && COMPATIBLE_ICAO.has(f.dep));
+    const arrMatch = (fi.sceneryNative && NATIVE_ICAO.has(f.arr)) || (fi.sceneryCompatible && COMPATIBLE_ICAO.has(f.arr));
+    if (!depMatch && !arrMatch) return false;
+  }
   return true;
+}
+
+function sceneryMatch(icao) {
+  if (!document.getElementById('scenery-filter').checked) return false;
+  const useNative = document.getElementById('scenery-native').checked;
+  const useCompat = document.getElementById('scenery-compatible').checked;
+  return (useNative && NATIVE_ICAO.has(icao)) || (useCompat && COMPATIBLE_ICAO.has(icao));
 }
 
 function getSorted(arr) {
@@ -1164,6 +1198,8 @@ function rowHTML(f) {
   const apArr = AP_MAP[f.arr];
   const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,14) : f.dep;
   const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,14) : f.arr;
+  const depScenery = sceneryMatch(f.dep);
+  const arrScenery = sceneryMatch(f.arr);
   const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
                    selRoute.airline===f.airline && selRoute.ac===f.ac;
   const seasonBadge = f.season==='S' ? '<span class="badge badge-s">SUMMER</span>'
@@ -1174,8 +1210,8 @@ function rowHTML(f) {
   const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
   return `<div class="tr${isActive?' active':''}" style="position:absolute;left:0;right:0;height:${ROW_H}px;">
     <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
-    <div class="td td-mono${SCENERY_ICAO.has(f.dep)?' td-scenery':''}">${f.dep}<div class="td-sub">${depCity}</div></div>
-    <div class="td td-mono${SCENERY_ICAO.has(f.arr)?' td-scenery':''}">${f.arr}<div class="td-sub">${arrCity}</div></div>
+    <div class="td td-mono"><span class="${depScenery?'icao-scenery':''}">${f.dep}</span><div class="td-sub">${depCity}</div></div>
+    <div class="td td-mono"><span class="${arrScenery?'icao-scenery':''}">${f.arr}</span><div class="td-sub">${arrCity}</div></div>
     <div class="td">${f.acLabel.substring(0,22)} ${cargoBadge}<div class="td-sub td-mono">${f.ac}</div></div>
     <div class="td td-mono">${depTimeStr ? depTimeStr+'<span style="opacity:.5;"> → </span>'+arrTimeStr : ''}</div>
     <div class="td td-mono">${formatDur(f.dur)}</div>
@@ -1225,6 +1261,8 @@ function mobileCardHTML(f) {
   const apArr = AP_MAP[f.arr];
   const depCity = apDep ? (apDep[1]||apDep[0]).substring(0,18) : '';
   const arrCity = apArr ? (apArr[1]||apArr[0]).substring(0,18) : '';
+  const depScenery = sceneryMatch(f.dep);
+  const arrScenery = sceneryMatch(f.arr);
   const isActive = selRoute && selRoute.dep===f.dep && selRoute.arr===f.arr &&
                    selRoute.airline===f.airline && selRoute.ac===f.ac;
   const seasonBadge = f.season==='S' ? '<span class="badge badge-s">S</span>'
@@ -1237,9 +1275,9 @@ function mobileCardHTML(f) {
       <span class="mcard-year td-mono">${f.year} ${seasonBadge}</span>
     </div>
     <div class="mcard-route">
-      <div class="mcard-ap${SCENERY_ICAO.has(f.dep)?' mcard-ap-scenery':''}"><span class="td-mono">${f.dep}</span><span class="mcard-city">${depCity}</span></div>
+      <div class="mcard-ap"><span class="td-mono ${depScenery?'icao-scenery':''}">${f.dep}</span><span class="mcard-city">${depCity}</span></div>
       <div class="mcard-arrow">→</div>
-      <div class="mcard-ap mcard-ap-r${SCENERY_ICAO.has(f.arr)?' mcard-ap-scenery':''}"><span class="td-mono">${f.arr}</span><span class="mcard-city">${arrCity}</span></div>
+      <div class="mcard-ap mcard-ap-r"><span class="td-mono ${arrScenery?'icao-scenery':''}">${f.arr}</span><span class="mcard-city">${arrCity}</span></div>
     </div>
     <div class="mcard-bottom">
       <span class="mcard-ac">${f.acLabel.substring(0,26)} ${cargoBadge}</span>
@@ -1499,6 +1537,11 @@ function toggleAirportFields() {
   if (!on) { document.getElementById('dep').value=''; document.getElementById('arr').value=''; }
   queueRender();
 }
+function toggleSceneryFilter() {
+  const on = document.getElementById('scenery-filter').checked;
+  document.getElementById('scenery-subfields').style.display = on ? 'flex' : 'none';
+  queueRender();
+}
 function toggleAirlineField() {} // removed - airline field always visible
 function resetAll() {
   document.getElementById('dep').value='';
@@ -1520,6 +1563,10 @@ function resetAll() {
   document.getElementById('departs-hi').value=60;
   document.getElementById('pax').checked=true;
   document.getElementById('cargo').checked=true;
+  document.getElementById('scenery-filter').checked=false;
+  document.getElementById('scenery-native').checked=true;
+  document.getElementById('scenery-compatible').checked=true;
+  document.getElementById('scenery-subfields').style.display='none';
   document.querySelectorAll('input[name=andor]')[0].checked=true;
   document.getElementById('smart-input').value='';
   document.getElementById('smart-tokens').innerHTML='';
