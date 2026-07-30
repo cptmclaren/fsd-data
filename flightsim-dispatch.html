@@ -176,6 +176,11 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 .globe-info { position:absolute; top:10px; left:12px; font-size:10px; font-family:var(--mono); color:var(--text3); pointer-events:none; line-height:1.6; }
 .globe-info span { color:var(--text2); }
 .globe-hint { position:absolute; bottom:10px; left:12px; font-size:10px; color:var(--text3); pointer-events:none; }
+.globe-hint .hint-touch { display:none; }
+@media (pointer: coarse) {
+  .globe-hint .hint-mouse { display:none; }
+  .globe-hint .hint-touch { display:inline; }
+}
 .globe-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text3); font-size:12px; flex-direction:column; gap:6px; }
 .sort-label { font-size:11px; color:var(--text3); white-space:nowrap; }
 .filter-note { font-size:10px; font-family:var(--mono); color:var(--text3); margin-left:auto; }
@@ -386,10 +391,12 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .mobile-filters-badge {
     width:8px; height:8px; border-radius:50%; background:var(--accent);
   }
-  .right-topbar { flex-wrap:nowrap; }
+  .right-topbar { flex-wrap:wrap; row-gap:6px; }
   .sort-seg-wrap { display:none; }
-  #sort-sel { display:block; flex:0 1 140px; font-size:12px; padding:6px 8px; }
+  .sort-label { display:none; } /* the dropdown itself is self-explanatory; frees up room */
+  #sort-sel { display:block; flex:1 1 100px; min-width:80px; font-size:12px; padding:6px 8px; }
   .filter-note { display:none; } /* redundant with bottombar-stats on narrow screens */
+  .view-toggle-btn { padding:4px 8px; font-size:10px; }
 
   /* Grid table -> card list */
   .table-head, .table-wrap { display:none; }
@@ -698,7 +705,10 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <div class="globe-wrap view-pane view-hidden" id="globe-wrap">
           <canvas id="globe-canvas"></canvas>
           <div class="globe-info" id="globe-info"></div>
-          <div class="globe-hint">Drag to rotate · scroll to zoom</div>
+          <div class="globe-hint">
+            <span class="hint-mouse">Drag to rotate · scroll to zoom · click a route</span>
+            <span class="hint-touch">Drag to rotate · pinch to zoom · tap a route</span>
+          </div>
           <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
         </div>
       </div>
@@ -2005,7 +2015,10 @@ const AIRPORT_COLOR = 0xf0ede8;
 const SELECTED_COLOR = 0xffa35c;
 const BASE_WIDTH = 2.2;
 const SELECTED_WIDTH = 5;
-const CLICK_DRAG_THRESHOLD = 5; // px — pointer moves beyond this = a rotate drag, not a click
+const CLICK_DRAG_THRESHOLD = 5;        // px — mouse: pointer moves beyond this = a rotate drag, not a click
+const CLICK_DRAG_THRESHOLD_TOUCH = 12; // px — touch taps naturally jitter more than a mouse click
+const RAYCAST_THRESHOLD = 0.02;        // mouse: tuned for a precise pointer
+const RAYCAST_THRESHOLD_TOUCH = 0.09;  // touch: much more forgiving hit area for a fingertip
 const MIN_DIST = 7, MAX_DIST = 30;
 let targetDistance = 15; // eased-toward camera distance, driven by our own wheel handler
 
@@ -2013,6 +2026,7 @@ let scene, camera, renderer, controls, routeGroup, airportPoints, clock;
 let initPromise = null, visible = false;
 let raycaster, arcLines = [], hoveredLine = null, selectedLine = null, pendingHoverCheck = false;
 let pointerDownPos = null;
+let activePinch = false, pinchStartDist = null, pinchStartDistance = null;
 const mouseNDC = new THREE.Vector2(-99, -99);
 const resolution = new THREE.Vector2();
 
@@ -2120,6 +2134,10 @@ function init() {
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+    renderer.domElement.addEventListener('touchend', onTouchEnd);
+    renderer.domElement.addEventListener('touchcancel', onTouchEnd);
 
     const loadingEl = document.getElementById('globe-loading');
     if (loadingEl) loadingEl.style.display = 'none';
@@ -2144,6 +2162,10 @@ function onResize() {
 }
 
 function onPointerMove(e) {
+  // Touch has no real "hover" — pointermove there just means a finger is
+  // dragging the globe, and re-picking a line under it every frame is both
+  // meaningless and a distracting flicker. Only mouse gets the affordance.
+  if (e.pointerType === 'touch') return;
   const rect = renderer.domElement.getBoundingClientRect();
   mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
   mouseNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -2172,31 +2194,63 @@ function onWheel(e) {
   const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) / 100;
   zoomVelocity = Math.max(-ZOOM_MAX_VELOCITY, Math.min(ZOOM_MAX_VELOCITY, zoomVelocity + delta * ZOOM_IMPULSE));
 }
+
+// Two-finger pinch zoom. OrbitControls' own touch dolly is tied to the same
+// enableZoom flag as wheel zoom, which we disabled to drive zoom ourselves —
+// so pinch needs its own handling here, applied directly (no inertia) since
+// a pinch is direct manipulation and should track the fingers 1:1.
+function touchDist(touches) {
+  return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+}
+function onTouchStart(e) {
+  if (e.touches.length === 2) {
+    activePinch = true;
+    zoomVelocity = 0;
+    pinchStartDist = touchDist(e.touches);
+    pinchStartDistance = targetDistance;
+  }
+}
+function onTouchMove(e) {
+  if (e.touches.length === 2 && pinchStartDist) {
+    e.preventDefault();
+    const scale = pinchStartDist / touchDist(e.touches);
+    targetDistance = Math.min(MAX_DIST, Math.max(MIN_DIST, pinchStartDistance * scale));
+  }
+}
+function onTouchEnd(e) {
+  if (e.touches.length < 2) { activePinch = false; pinchStartDist = null; }
+}
 function onPointerDown(e) {
-  pointerDownPos = { x: e.clientX, y: e.clientY };
+  // A 2nd finger landing means this gesture is a pinch, not a tap — bail so
+  // the eventual pointerup doesn't get misread as a tap-to-select.
+  if (e.pointerType === 'touch' && e.isPrimary === false) { pointerDownPos = null; return; }
+  pointerDownPos = { x: e.clientX, y: e.clientY, touch: e.pointerType === 'touch' };
 }
 function onPointerUp(e) {
   if (!pointerDownPos) return;
   const dx = e.clientX - pointerDownPos.x, dy = e.clientY - pointerDownPos.y;
+  const wasTouch = pointerDownPos.touch;
   pointerDownPos = null;
-  if (Math.hypot(dx, dy) > CLICK_DRAG_THRESHOLD) return; // it was a rotate-drag, not a click
-  handleClick(e);
+  if (activePinch) return; // a pinch was in progress — not a tap
+  const threshold = wasTouch ? CLICK_DRAG_THRESHOLD_TOUCH : CLICK_DRAG_THRESHOLD;
+  if (Math.hypot(dx, dy) > threshold) return; // it was a rotate-drag, not a click
+  handleClick(e, wasTouch);
 }
 
-function pickLineAt(clientX, clientY) {
+function pickLineAt(clientX, clientY, threshold) {
   const rect = renderer.domElement.getBoundingClientRect();
   const ndc = new THREE.Vector2(
     ((clientX - rect.left) / rect.width) * 2 - 1,
     -((clientY - rect.top) / rect.height) * 2 + 1
   );
   raycaster.setFromCamera(ndc, camera);
-  raycaster.params.Line2 = { threshold: 0.02 };
+  raycaster.params.Line2 = { threshold };
   const hits = raycaster.intersectObjects(arcLines, false);
   return hits.length ? hits[0].object : null;
 }
 
-function handleClick(e) {
-  const hit = pickLineAt(e.clientX, e.clientY);
+function handleClick(e, isTouch) {
+  const hit = pickLineAt(e.clientX, e.clientY, isTouch ? RAYCAST_THRESHOLD_TOUCH : RAYCAST_THRESHOLD);
   if (hit) {
     if (typeof window.selectRoute === 'function') window.selectRoute(hit.userData.repFlight);
   } else if (typeof window.closeDetail === 'function') {
@@ -2223,7 +2277,7 @@ function checkHover() {
   pendingHoverCheck = false;
   if (!renderer || !arcLines.length) return;
   raycaster.setFromCamera(mouseNDC, camera);
-  raycaster.params.Line2 = { threshold: 0.02 };
+  raycaster.params.Line2 = { threshold: RAYCAST_THRESHOLD };
   const hits = raycaster.intersectObjects(arcLines, false);
   const hit = hits.length ? hits[0].object : null;
 
@@ -2255,7 +2309,9 @@ function animate() {
   const offset = camera.position.clone().sub(controls.target);
   const dist = offset.length();
   if (Math.abs(dist - targetDistance) > 0.001) {
-    const ease = 1 - Math.exp(-12 * dt); // frame-rate independent smoothing
+    // Pinch is direct manipulation — track the fingers tightly (little lag).
+    // Wheel/scroll gets a gentler ease so its inertia glide feels smooth.
+    const ease = 1 - Math.exp(-(activePinch ? 40 : 12) * dt);
     const eased = dist + (targetDistance - dist) * ease;
     offset.setLength(eased);
     camera.position.copy(controls.target).add(offset);
