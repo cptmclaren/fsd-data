@@ -487,13 +487,29 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
             <input type="checkbox" id="scenery-filter" onchange="toggleSceneryFilter()">
             MSFS2024 Scenery
           </label>
-          <div id="scenery-subfields" style="display:none;margin-top:4px;gap:10px;">
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
-              <input type="checkbox" id="scenery-native" checked onchange="queueRender()"> Native
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
-              <input type="checkbox" id="scenery-compatible" checked onchange="queueRender()"> Compatible
-            </label>
+          <div id="scenery-subfields" style="display:none;flex-direction:column;gap:6px;margin-top:4px;">
+            <div style="display:flex;gap:10px;">
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="checkbox" id="scenery-native" checked onchange="queueRender()"> Native
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="checkbox" id="scenery-compatible" checked onchange="queueRender()"> Compatible
+              </label>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="scenery-role" value="either" checked onchange="queueRender()"> Either
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="scenery-role" value="dep" onchange="queueRender()"> Departure only
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="scenery-role" value="arr" onchange="queueRender()"> Arrival only
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;">
+                <input type="radio" name="scenery-role" value="both" onchange="queueRender()"> Both
+              </label>
+            </div>
           </div>
         </div>
 
@@ -919,6 +935,7 @@ function getFilters() {
     sceneryEnable: document.getElementById('scenery-filter').checked,
     sceneryNative: document.getElementById('scenery-native').checked,
     sceneryCompatible: document.getElementById('scenery-compatible').checked,
+    sceneryRole: (document.querySelector('input[name=scenery-role]:checked') || {}).value || 'either',
   };
 }
 
@@ -988,11 +1005,14 @@ function matchesFilters(f, fi) {
     const diff = (dt - nowMins + 1440) % 1440;
     if (diff < fi.departsLo || diff > fi.departsHi) return false;
   }
-  // MSFS2024 scenery filter — show if dep OR arr has scenery in an enabled category
+  // MSFS2024 scenery filter — which end(s) must have scenery in an enabled category
   if (fi.sceneryEnable) {
     const depMatch = (fi.sceneryNative && NATIVE_ICAO.has(f.dep)) || (fi.sceneryCompatible && COMPATIBLE_ICAO.has(f.dep));
     const arrMatch = (fi.sceneryNative && NATIVE_ICAO.has(f.arr)) || (fi.sceneryCompatible && COMPATIBLE_ICAO.has(f.arr));
-    if (!depMatch && !arrMatch) return false;
+    if (fi.sceneryRole === 'dep') { if (!depMatch) return false; }
+    else if (fi.sceneryRole === 'arr') { if (!arrMatch) return false; }
+    else if (fi.sceneryRole === 'both') { if (!depMatch || !arrMatch) return false; }
+    else if (!depMatch && !arrMatch) return false; // either
   }
   return true;
 }
@@ -1652,6 +1672,7 @@ function resetAll() {
   document.getElementById('scenery-filter').checked=false;
   document.getElementById('scenery-native').checked=true;
   document.getElementById('scenery-compatible').checked=true;
+  document.querySelector('input[name=scenery-role][value=either]').checked=true;
   document.getElementById('scenery-subfields').style.display='none';
   document.querySelectorAll('input[name=andor]')[0].checked=true;
   document.getElementById('smart-input').value='';
