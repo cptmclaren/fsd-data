@@ -2016,9 +2016,10 @@ const SELECTED_COLOR = 0xffa35c;
 const BASE_WIDTH = 2.2;
 const SELECTED_WIDTH = 5;
 const CLICK_DRAG_THRESHOLD = 5;        // px — mouse: pointer moves beyond this = a rotate drag, not a click
-const CLICK_DRAG_THRESHOLD_TOUCH = 12; // px — touch taps naturally jitter more than a mouse click
-const RAYCAST_THRESHOLD = 0.02;        // mouse: tuned for a precise pointer
-const RAYCAST_THRESHOLD_TOUCH = 0.09;  // touch: much more forgiving hit area for a fingertip
+const CLICK_DRAG_THRESHOLD_TOUCH = 18; // px — a real fingertip jitters a lot more than a mouse click
+const RAYCAST_THRESHOLD = 0.02;        // mouse: Three.js Line2 raycast threshold, tuned for a precise pointer
+const TOUCH_TAP_RADIUS_PX = 26;        // touch: a real screen-space pixel radius (see pickLineTouchScreen) —
+                                        // more predictable to tune than Line2's raycast threshold units
 const MIN_DIST = 7, MAX_DIST = 30;
 let targetDistance = 15; // eased-toward camera distance, driven by our own wheel handler
 
@@ -2056,6 +2057,16 @@ function arcPoints(g1, g2, radius) {
     pts.push(p);
   }
   return pts;
+}
+
+// A handful of points is plenty for touch hit-testing (see pickLineTouchScreen)
+// — no need to walk the full 32-64 point render-quality polyline per tap.
+function downsample(pts, targetCount) {
+  if (pts.length <= targetCount) return pts;
+  const out = [];
+  const step = (pts.length - 1) / (targetCount - 1);
+  for (let i = 0; i < targetCount; i++) out.push(pts[Math.round(i * step)]);
+  return out;
 }
 
 function clearGroup(g) {
@@ -2249,8 +2260,50 @@ function pickLineAt(clientX, clientY, threshold) {
   return hits.length ? hits[0].object : null;
 }
 
+function distToSegment2D(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq > 0 ? ((px - x1) * dx + (py - y1) * dy) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+// Three.js's Line2 raycast threshold isn't in straightforward pixel units,
+// which made it hard to tune reliably for a fingertip. This does the hit
+// test manually in real screen pixels instead: project each line's (sparse,
+// pre-sampled) points to screen space and find the nearest one within a
+// fixed pixel radius. Points on the far side of the globe are skipped so a
+// route hidden behind the sphere can't "win" over a visible one nearby.
+const _screenProjVec = new THREE.Vector3();
+function projectToScreen(point, rectW, rectH) {
+  _screenProjVec.copy(point).project(camera);
+  return { x: (_screenProjVec.x * 0.5 + 0.5) * rectW, y: (-_screenProjVec.y * 0.5 + 0.5) * rectH };
+}
+function pickLineTouchScreen(clientX, clientY, pixelRadius) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const px = clientX - rect.left, py = clientY - rect.top;
+  const camDir = camera.position.clone().normalize(); // sphere is centered at origin
+  let best = null, bestDist = pixelRadius;
+  for (const line of arcLines) {
+    const hp = line.userData.hitPoints;
+    let prev = null;
+    for (const p of hp) {
+      if (p.dot(camDir) < 0) { prev = null; continue; } // far side of the globe — occluded, skip
+      const s = projectToScreen(p, rect.width, rect.height);
+      if (prev) {
+        const d = distToSegment2D(px, py, prev.x, prev.y, s.x, s.y);
+        if (d < bestDist) { bestDist = d; best = line; }
+      }
+      prev = s;
+    }
+  }
+  return best;
+}
+
 function handleClick(e, isTouch) {
-  const hit = pickLineAt(e.clientX, e.clientY, isTouch ? RAYCAST_THRESHOLD_TOUCH : RAYCAST_THRESHOLD);
+  const hit = isTouch
+    ? pickLineTouchScreen(e.clientX, e.clientY, TOUCH_TAP_RADIUS_PX)
+    : pickLineAt(e.clientX, e.clientY, RAYCAST_THRESHOLD);
   if (hit) {
     if (typeof window.selectRoute === 'function') window.selectRoute(hit.userData.repFlight);
   } else if (typeof window.closeDetail === 'function') {
@@ -2366,7 +2419,7 @@ function update(rows) {
     mat.resolution.copy(resolution);
     const line = new Line2(geo, mat);
     line.computeLineDistances();
-    line.userData = { dep, arr, count, repFlight: pairRep.get(key), baseColor, baseOpacity };
+    line.userData = { dep, arr, count, repFlight: pairRep.get(key), baseColor, baseOpacity, hitPoints: downsample(pts, 10) };
     routeGroup.add(line);
     arcLines.push(line);
   }
