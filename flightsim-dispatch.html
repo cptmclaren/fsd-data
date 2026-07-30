@@ -168,7 +168,10 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 .view-toggle-btn { font-family:var(--sans); font-size:11px; font-weight:500; color:var(--text3); background:transparent; border:none; padding:4px 10px; border-radius:3px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:background .1s,color .1s; }
 .view-toggle-btn:hover { color:var(--text2); }
 .view-toggle-btn.active { background:var(--accent); color:#fff; }
-.globe-wrap { flex:1; position:relative; overflow:hidden; background:radial-gradient(ellipse at 50% 35%, #10151c 0%, #05070a 75%); display:none; }
+.results-area { position:relative; flex:1; overflow:hidden; }
+.view-pane { position:absolute; inset:0; opacity:1; transition:opacity .32s ease; }
+.view-pane.view-hidden { opacity:0; pointer-events:none; }
+.globe-wrap { position:relative; overflow:hidden; background:radial-gradient(ellipse at 50% 35%, #10151c 0%, #05070a 75%); display:flex; }
 .globe-wrap canvas { display:block; width:100%; height:100%; }
 .globe-info { position:absolute; top:10px; left:12px; font-size:10px; font-family:var(--mono); color:var(--text3); pointer-events:none; line-height:1.6; }
 .globe-info span { color:var(--text2); }
@@ -179,7 +182,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 .filter-note span { color:var(--accent); }
 
 /* ── TABLE ── */
-.table-wrap { flex:1; overflow-y:auto; }
+.table-wrap { overflow-y:auto; }
 .table-head {
   display:grid;
   grid-template-columns: 90px 70px 70px 1fr 110px 60px 62px;
@@ -390,7 +393,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 
   /* Grid table -> card list */
   .table-head, .table-wrap { display:none; }
-  .mobile-card-list { display:block; flex:1; overflow-y:auto; position:relative; -webkit-overflow-scrolling:touch; }
+  .mobile-card-list { display:block; overflow-y:auto; -webkit-overflow-scrolling:touch; }
 
   .bottombar { flex-wrap:wrap; }
   .bottombar .btn { flex:1 1 auto; min-height:40px; }
@@ -687,15 +690,17 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <div class="th" id="th-year"    onclick="setSort('year')">Year</div>
       </div>
 
-      <div class="table-wrap" id="table-wrap">
-        <div class="no-results" style="padding:60px 0;"><div class="no-results-big">⟳</div>Loading...</div>
-      </div>
-      <div class="mobile-card-list" id="mobile-card-list"></div>
-      <div class="globe-wrap" id="globe-wrap">
-        <canvas id="globe-canvas"></canvas>
-        <div class="globe-info" id="globe-info"></div>
-        <div class="globe-hint">Drag to rotate · scroll to zoom</div>
-        <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
+      <div class="results-area">
+        <div class="table-wrap view-pane" id="table-wrap">
+          <div class="no-results" style="padding:60px 0;"><div class="no-results-big">⟳</div>Loading...</div>
+        </div>
+        <div class="mobile-card-list view-pane" id="mobile-card-list"></div>
+        <div class="globe-wrap view-pane view-hidden" id="globe-wrap">
+          <canvas id="globe-canvas"></canvas>
+          <div class="globe-info" id="globe-info"></div>
+          <div class="globe-hint">Drag to rotate · scroll to zoom</div>
+          <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
+        </div>
       </div>
 
       <div class="bottombar">
@@ -1577,6 +1582,8 @@ function toggleSceneryFilter() {
   queueRender();
 }
 
+const VIEW_TRANSITION_MS = 320; // must match .view-pane's CSS transition duration
+
 function setView(view) {
   if (view === currentView) return;
   currentView = view;
@@ -1587,11 +1594,15 @@ function setView(view) {
   const mobileList = document.getElementById('mobile-card-list');
   const globeWrap = document.getElementById('globe-wrap');
 
+  // Both panes stay mounted and overlap (position:absolute via .view-pane) —
+  // toggling .view-hidden crossfades opacity between them instead of an
+  // instant display swap. display itself still tracks table-vs-cards per
+  // viewport (base CSS / mobile media query), untouched here.
   if (view === 'map') {
     tableHead.style.display = 'none';
-    tableWrap.style.display = 'none';
-    mobileList.style.display = 'none';
-    globeWrap.style.display = 'flex';
+    tableWrap.classList.add('view-hidden');
+    mobileList.classList.add('view-hidden');
+    globeWrap.classList.remove('view-hidden');
     if (window.FSD_Globe) {
       Promise.resolve(window.FSD_Globe.init()).then(() => {
         window.FSD_Globe.update(lastFilteredRows);
@@ -1599,12 +1610,12 @@ function setView(view) {
       });
     }
   } else {
-    globeWrap.style.display = 'none';
-    if (window.FSD_Globe) window.FSD_Globe.hide();
-    // Clear inline overrides — base CSS + mobile media query decide table vs card list
     tableHead.style.display = '';
-    tableWrap.style.display = '';
-    mobileList.style.display = '';
+    tableWrap.classList.remove('view-hidden');
+    mobileList.classList.remove('view-hidden');
+    globeWrap.classList.add('view-hidden');
+    // Let the fade-out finish before pausing the render loop, so it doesn't freeze mid-fade.
+    if (window.FSD_Globe) setTimeout(() => { if (currentView === 'table') window.FSD_Globe.hide(); }, VIEW_TRANSITION_MS);
   }
 }
 function toggleAirlineField() {} // removed - airline field always visible
@@ -1998,7 +2009,7 @@ const CLICK_DRAG_THRESHOLD = 5; // px — pointer moves beyond this = a rotate d
 const MIN_DIST = 7, MAX_DIST = 30;
 let targetDistance = 15; // eased-toward camera distance, driven by our own wheel handler
 
-let scene, camera, renderer, controls, routeGroup, airportPoints;
+let scene, camera, renderer, controls, routeGroup, airportPoints, clock;
 let initPromise = null, visible = false;
 let raycaster, arcLines = [], hoveredLine = null, selectedLine = null, pendingHoverCheck = false;
 let pointerDownPos = null;
@@ -2053,6 +2064,7 @@ function init() {
     const container = document.getElementById('globe-wrap');
 
     scene = new THREE.Scene();
+    clock = new THREE.Clock();
     camera = new THREE.PerspectiveCamera(45, (container.clientWidth || 1) / (container.clientHeight || 1), 0.1, 1000);
     camera.position.set(0, 3, 15);
 
@@ -2144,32 +2156,21 @@ function onPointerLeave() {
   mouseNDC.set(-99, -99);
   if (!pendingHoverCheck) { pendingHoverCheck = true; requestAnimationFrame(checkHover); }
 }
-// A trackpad/precision-scroll mouse fires many small wheel events for one
-// physical gesture. Clamping each event's own delta isn't enough — dozens of
-// small clamped steps still multiply together into a big total change. So
-// instead we bucket events into short time windows and cap the TOTAL zoom
-// achievable within one window, re-anchored to the distance at the window's
-// start — the result is the same whether a gesture arrives as 1 big event or
-// 40 tiny ones, and it's bounded either way.
-let wheelWindowStart = 0;
-let wheelWindowDelta = 0;
-let wheelBaseDistance = null;
-const WHEEL_WINDOW_MS = 150;
-const WHEEL_MAX_DELTA = 150;
-const WHEEL_WINDOW_MAX_FACTOR = 0.82; // most a single window can zoom in by
+// Google-Earth-style inertial zoom: each wheel tick adds an impulse to a
+// velocity (clamped, so a burst of many small events just saturates the
+// clamp instead of compounding into a huge jump), and the velocity decays
+// smoothly every frame in animate(). This gives continuous, momentum-based
+// motion instead of discrete per-tick steps.
+// Positive deltaY (scroll down / away) = zoom OUT, matching Google Maps/Earth.
+let zoomVelocity = 0;
+const ZOOM_MAX_VELOCITY = 2.2;
+const ZOOM_IMPULSE = 0.11;
+const ZOOM_DAMPING = 5; // higher = velocity decays to a stop sooner after the wheel goes quiet
 
 function onWheel(e) {
   e.preventDefault();
-  const now = performance.now();
-  if (wheelBaseDistance === null || now - wheelWindowStart > WHEEL_WINDOW_MS) {
-    wheelWindowStart = now;
-    wheelWindowDelta = 0;
-    wheelBaseDistance = targetDistance;
-  }
-  wheelWindowDelta += e.deltaY;
-  const capped = Math.sign(wheelWindowDelta) * Math.min(Math.abs(wheelWindowDelta), WHEEL_MAX_DELTA);
-  const factor = Math.pow(WHEEL_WINDOW_MAX_FACTOR, capped / WHEEL_MAX_DELTA);
-  targetDistance = Math.min(MAX_DIST, Math.max(MIN_DIST, wheelBaseDistance * factor));
+  const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) / 100;
+  zoomVelocity = Math.max(-ZOOM_MAX_VELOCITY, Math.min(ZOOM_MAX_VELOCITY, zoomVelocity + delta * ZOOM_IMPULSE));
 }
 function onPointerDown(e) {
   pointerDownPos = { x: e.clientX, y: e.clientY };
@@ -2236,14 +2237,26 @@ function checkHover() {
 function animate() {
   requestAnimationFrame(animate);
   if (!visible) return;
-  // Ease the camera toward targetDistance (set by onWheel) instead of jumping —
-  // OrbitControls re-derives its internal spherical radius from camera.position
-  // at the top of update(), so nudging position here composes cleanly with its
-  // own rotate/pan damping and still gets clamped to min/maxDistance below.
+  const dt = Math.min(clock.getDelta(), 0.1); // cap dt so a backgrounded-tab gap doesn't jump the view
+
+  if (Math.abs(zoomVelocity) > 0.0001) {
+    // Multiplicative (log-scale) change — constant *speed* whether close in
+    // or far out, which reads as smooth continuous motion rather than
+    // crawling near the surface and flying past at a distance.
+    targetDistance = Math.min(MAX_DIST, Math.max(MIN_DIST, targetDistance * Math.exp(zoomVelocity * dt)));
+    zoomVelocity *= Math.exp(-ZOOM_DAMPING * dt);
+    if (Math.abs(zoomVelocity) < 0.001) zoomVelocity = 0;
+  }
+
+  // Ease the camera toward targetDistance instead of jumping — OrbitControls
+  // re-derives its internal spherical radius from camera.position at the top
+  // of update(), so nudging position here composes cleanly with its own
+  // rotate/pan damping and still gets clamped to min/maxDistance below.
   const offset = camera.position.clone().sub(controls.target);
   const dist = offset.length();
   if (Math.abs(dist - targetDistance) > 0.001) {
-    const eased = dist + (targetDistance - dist) * 0.15;
+    const ease = 1 - Math.exp(-12 * dt); // frame-rate independent smoothing
+    const eased = dist + (targetDistance - dist) * ease;
     offset.setLength(eased);
     camera.position.copy(controls.target).add(offset);
   }
