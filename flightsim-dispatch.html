@@ -61,8 +61,18 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .titlebar-sub { font-size:11px; color:var(--text3); font-family:var(--mono); }
 .titlebar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
 .titlebar-version { font-size:10px; font-family:var(--mono); color:var(--text3); }
-.titlebar-version-link { cursor:pointer; transition:color .15s cubic-bezier(.4,0,.2,1); border-bottom:1px dashed transparent; }
-.titlebar-version-link:hover { color:var(--accent); border-bottom-color:rgba(217,119,87,.4); }
+.titlebar-changelog-btn {
+  display:inline-flex; align-items:center; gap:5px;
+  margin-left:2px; padding:3px 10px; border-radius:12px;
+  background:var(--accent-dim); color:var(--accent);
+  border:1px solid rgba(217,119,87,.35);
+  font-family:var(--sans); font-size:10.5px; font-weight:600; line-height:1.4;
+  cursor:pointer; white-space:nowrap;
+  transition:background .18s cubic-bezier(.4,0,.2,1), color .18s, box-shadow .18s, transform .12s cubic-bezier(.4,0,.2,1);
+}
+.titlebar-changelog-btn i { font-size:11px; }
+.titlebar-changelog-btn:hover { background:var(--accent); color:#fff; box-shadow:0 0 0 3px rgba(217,119,87,0.18); }
+.titlebar-changelog-btn:active { transform:scale(.96); }
 #load-status { font-size:11px; font-family:var(--mono); color:var(--amber); }
 
 /* ── BODY SPLIT ── */
@@ -537,7 +547,8 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   <div class="titlebar">
     <span class="titlebar-logo">FlightSim Dispatch</span>
     <span class="titlebar-sep"></span>
-    <span class="titlebar-sub titlebar-version-link" onclick="openChangelog()" title="View what's new">v3.1 · Historical Route Database</span>
+    <span class="titlebar-sub">v3.1 · Historical Route Database</span>
+    <button class="titlebar-changelog-btn" onclick="openChangelog()" title="View what's new"><i class="ti ti-sparkles" aria-hidden="true"></i> Changelog</button>
     <div class="titlebar-right">
       <span id="load-status"></span>
     </div>
@@ -2252,6 +2263,25 @@ window.addEventListener('load', () => { loadData().then(() => { decodeState(); s
 // Shown once per browser (tracked via localStorage) after each dated update.
 // Also reachable any time via the "v3.1" link in the titlebar.
 const CHANGELOG_ID = '2026-08-02-route-update';
+// Some browsers/extensions silently block or auto-clear localStorage
+// (Safari private mode, strict tracking prevention, etc.) which would make
+// this popup reappear on every load. A cookie is used as a second,
+// independent store so "seen" state survives even if localStorage doesn't.
+function getChangelogSeen() {
+  try {
+    const ls = localStorage.getItem('fsd_changelog_seen');
+    if (ls) return ls;
+  } catch (e) {}
+  const m = document.cookie.match(/(?:^|; )fsd_changelog_seen=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setChangelogSeen(id) {
+  try { localStorage.setItem('fsd_changelog_seen', id); } catch (e) {}
+  try {
+    const expires = new Date(Date.now() + 366*24*60*60*1000).toUTCString();
+    document.cookie = 'fsd_changelog_seen=' + encodeURIComponent(id) + '; expires=' + expires + '; path=/; SameSite=Lax';
+  } catch (e) {}
+}
 function openChangelog() {
   const el = document.getElementById('changelog-backdrop');
   if (!el) return;
@@ -2263,7 +2293,7 @@ function closeChangelog() {
   if (!el || el.style.display === 'none') return;
   el.classList.add('closing');
   setTimeout(() => { el.style.display = 'none'; el.classList.remove('closing'); }, 220);
-  try { localStorage.setItem('fsd_changelog_seen', CHANGELOG_ID); } catch (e) {}
+  setChangelogSeen(CHANGELOG_ID);
 }
 (function initChangelog() {
   const el = document.getElementById('changelog-backdrop');
@@ -2272,9 +2302,7 @@ function closeChangelog() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && el.style.display !== 'none') closeChangelog();
   });
-  let seen = null;
-  try { seen = localStorage.getItem('fsd_changelog_seen'); } catch (e) {}
-  if (seen !== CHANGELOG_ID) openChangelog();
+  if (getChangelogSeen() !== CHANGELOG_ID) openChangelog();
 })();
 window.addEventListener('resize', positionSortIndicator);
 </script>
