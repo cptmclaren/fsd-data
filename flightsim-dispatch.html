@@ -374,6 +374,13 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .titlebar-sub { display:none; }
   .mobile-scrim { display:block; }
 
+  /* Fixed height:36px (desktop) clips/cramps once content wraps on narrow
+     screens — let the bar grow and wrap as whole items instead of each
+     text node breaking mid-word. */
+  .titlebar { height:auto; min-height:36px; padding:6px 10px; flex-wrap:wrap; row-gap:4px; }
+  .titlebar-logo, #load-status { white-space:nowrap; }
+  .titlebar-changelog-btn { padding:4px 9px; font-size:10px; }
+
   /* Single-column stack: search stays inline at top, results fill the rest */
   .body { grid-template-columns:1fr; grid-template-rows:auto 1fr; }
   .left { border-right:none; border-bottom:1px solid var(--border2); }
@@ -506,7 +513,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
     <div class="changelog-body">
       <div class="changelog-item">
         <div class="changelog-item-icon add"><i class="ti ti-plus" aria-hidden="true"></i></div>
-        <div class="changelog-item-text"><b>1.8M+ new routes added.</b> The database now covers <b>2,342,293 routes</b> spanning 1950 through 2024, more than 3x the previous size.</div>
+        <div class="changelog-item-text"><b>1.8M+ new routes added.</b> The database now covers <b>2,342,293 routes</b> spanning 1950 through 2026, more than 3x the previous size.</div>
       </div>
       <div class="changelog-item">
         <div class="changelog-item-icon fix"><i class="ti ti-tool" aria-hidden="true"></i></div>
@@ -533,7 +540,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
 <div id="loading-overlay" class="loading-overlay">
   <div class="loading-spinner"></div>
   <div class="loading-text" id="loading-text">Initializing FlightSim Dispatch...</div>
-  <div class="loading-sub" id="loading-sub">2,342,293 routes · 1950–2024</div>
+  <div class="loading-sub" id="loading-sub">2,342,293 routes · 1950–2026</div>
 </div>
 
 <div class="app">
@@ -860,14 +867,14 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <!-- Year slider -->
         <div class="fg">
           <div class="flabel">Flight Year:</div>
-          <div class="range-readout"><span id="yr-lo-v">1950</span><span id="yr-hi-v">2024</span></div>
+          <div class="range-readout"><span id="yr-lo-v">1950</span><span id="yr-hi-v">2026</span></div>
           <div class="dual-wrap" style="height:20px;">
             <div class="dual-track"></div>
             <div class="dual-fill" id="yr-fill"></div>
-            <input type="range" id="yr-lo" min="1950" max="2024" value="1950" step="1">
-            <input type="range" id="yr-hi" min="1950" max="2024" value="2024" step="1">
+            <input type="range" id="yr-lo" min="1950" max="2026" value="1950" step="1">
+            <input type="range" id="yr-hi" min="1950" max="2026" value="2026" step="1">
           </div>
-          <div class="range-bounds"><span>1950</span><span>2025</span></div>
+          <div class="range-bounds"><span>1950</span><span>2026</span></div>
         </div>
 
         <!-- Departs in next X minutes -->
@@ -992,7 +999,6 @@ let excludedVariants = new Set(); // ac codes user has clicked off
 let IDX_DEP = new Map();   // dep ICAO -> [i, ...]
 let IDX_ARR = new Map();   // arr ICAO -> [i, ...]
 let IDX_AL  = new Map();   // airline  -> [i, ...]
-let IDX_FN  = new Map();   // airline+flightnum -> [i, ...]
 let sortCol = "airline", sortDir = "asc";
 let selRoute = null, selFlightIdx = null;
 let renderTimer = null;
@@ -1001,6 +1007,17 @@ let currentView = 'table';   // 'table' | 'map'
 let lastFilteredRows = [];   // most recent filtered result set, fed to the 3D map
 
 // ── FETCH + PARSE ──
+// setTimeout-based yielding gets clamped to ~1000ms per call in backgrounded
+// tabs (e.g. the page opened in a background tab), which would turn a
+// several-second parse into a multi-minute one. MessageChannel posts aren't
+// subject to that throttling, so use it to yield to the browser instead.
+const yieldToMain = (() => {
+  const channel = new MessageChannel();
+  const callbacks = [];
+  channel.port1.onmessage = () => { const cb = callbacks.shift(); if (cb) cb(); };
+  return () => new Promise(resolve => { callbacks.push(resolve); channel.port2.postMessage(null); });
+})();
+
 async function gunzipToText(bytes) {
   const ds = new DecompressionStream('gzip');
   const writer = ds.writable.getWriter();
@@ -1063,43 +1080,45 @@ async function loadData() {
   loadText.textContent = 'Parsing routes...';
   await new Promise(r => setTimeout(r, 10));
 
-  // Parse pipe-delimited and build indexes in a single pass
+  // Parse pipe-delimited and build indexes in a single pass. Chunked with a
+  // yield between batches so the tab stays responsive (and the loading text
+  // keeps updating) instead of blocking the main thread for several seconds
+  // straight on a dataset this size.
   const lines = text.split('\n');
   DB = [];
-  IDX_DEP.clear(); IDX_ARR.clear(); IDX_AL.clear(); IDX_FN.clear();
-  for (let i = 0; i < lines.length; i++) {
-    const p = lines[i].split('|');
-    if (p.length < 7) continue;
-    const acCode = p[3];
-    const idx = DB.length;
-    DB.push({
-      airline: p[0],
-      dep: p[1],
-      arr: p[2],
-      ac: acCode,
-      acLabel: AC_MAP[acCode] || acCode,
-      year: parseInt(p[4]),
-      season: p[5],
-      dur: parseFloat(p[6]),
-      fns: p[7] || '',
-      depTime: p[8] || '',
-      arrTime: p[9] || '',
-    });
-    // Build indexes inline — one pass instead of two
-    const r = DB[idx];
-    if (!IDX_DEP.has(r.dep)) IDX_DEP.set(r.dep, []);
-    IDX_DEP.get(r.dep).push(idx);
-    if (!IDX_ARR.has(r.arr)) IDX_ARR.set(r.arr, []);
-    IDX_ARR.get(r.arr).push(idx);
-    if (!IDX_AL.has(r.airline)) IDX_AL.set(r.airline, []);
-    IDX_AL.get(r.airline).push(idx);
-    if (r.fns) {
-      r.fns.split(',').forEach(fn => {
-        const key = (r.airline + fn.trim()).toUpperCase();
-        if (!IDX_FN.has(key)) IDX_FN.set(key, []);
-        IDX_FN.get(key).push(idx);
+  IDX_DEP.clear(); IDX_ARR.clear(); IDX_AL.clear();
+  const CHUNK_SIZE = 150000;
+  for (let start = 0; start < lines.length; start += CHUNK_SIZE) {
+    const end = Math.min(start + CHUNK_SIZE, lines.length);
+    for (let i = start; i < end; i++) {
+      const p = lines[i].split('|');
+      if (p.length < 7) continue;
+      const acCode = p[3];
+      const idx = DB.length;
+      DB.push({
+        airline: p[0],
+        dep: p[1],
+        arr: p[2],
+        ac: acCode,
+        acLabel: AC_MAP[acCode] || acCode,
+        year: parseInt(p[4]),
+        season: p[5],
+        dur: parseFloat(p[6]),
+        fns: p[7] || '',
+        depTime: p[8] || '',
+        arrTime: p[9] || '',
       });
+      // Build indexes inline — one pass instead of two
+      const r = DB[idx];
+      if (!IDX_DEP.has(r.dep)) IDX_DEP.set(r.dep, []);
+      IDX_DEP.get(r.dep).push(idx);
+      if (!IDX_ARR.has(r.arr)) IDX_ARR.set(r.arr, []);
+      IDX_ARR.get(r.arr).push(idx);
+      if (!IDX_AL.has(r.airline)) IDX_AL.set(r.airline, []);
+      IDX_AL.get(r.airline).push(idx);
     }
+    loadText.textContent = `Parsing routes... ${Math.round(end / lines.length * 100)}%`;
+    await yieldToMain();
   }
   loadText.textContent = `Loaded ${DB.length.toLocaleString()} routes`;
   await new Promise(r => setTimeout(r, 200));
@@ -1150,6 +1169,8 @@ function getFilters() {
     airlines,
     airlineSet: new Set(airlines),
     andor: document.querySelector('input[name=andor]:checked').value,
+    pax: document.getElementById('pax').checked,
+    cargo: document.getElementById('cargo').checked,
     acFam: 'all',                          // legacy — not used anymore
     acFamilies: [...selAcFamilies],        // array of selected family strings
     excludedVariants: new Set(excludedVariants),
@@ -1168,8 +1189,9 @@ function getFilters() {
 }
 
 function hasActiveFilters(fi) {
-  const sliderDefault = fi.durLo === 0 && fi.durHi === 22*60 && fi.yrLo === 1950 && fi.yrHi === 2024;
-  const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && !fi.departsEnable && !fi.sceneryEnable;
+  const sliderDefault = fi.durLo === 0 && fi.durHi === 22*60 && fi.yrLo === 1950 && fi.yrHi === 2026;
+  const roleDefault = fi.pax && fi.cargo;
+  const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && roleDefault && !fi.departsEnable && !fi.sceneryEnable;
   const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamilies.length && qs.yearLo === null && qs.durHi === null;
   return !(noManual && noQS);
 }
@@ -1226,7 +1248,17 @@ function familyDisplayLabel(fam) {
   return fam;
 }
 
+// A route counts as "Cargo" (vs "PAX") when its aircraft label indicates a
+// freighter or combi variant. Shared so the Role filter and the table/card
+// CARGO badges never disagree with each other.
+function isCargoAircraft(acLabel) {
+  return /freight|cargo|freighter|combi/i.test(acLabel || '');
+}
+
 function matchesFilters(f, fi) {
+  const isCargo = isCargoAircraft(f.acLabel);
+  if (isCargo && !fi.cargo) return false;
+  if (!isCargo && !fi.pax) return false;
   // Manual filters
   if (fi.acFamilies.length) {
     const label = f.acLabel || '';
@@ -1250,7 +1282,7 @@ function matchesFilters(f, fi) {
   if (qs.acFamilies.length) { if (!qs.acFamilies.some(fam => acFamilyMatches(fam, f.ac, f.acLabel||''))) return false; }
   if (qs.yearLo !== null) { if (f.year < qs.yearLo || f.year > (qs.yearHi||qs.yearLo)) return false; }
   if (qs.flightNum !== null) { const key=(f.airline+qs.flightNum).toUpperCase(); if (!f.fns || !f.fns.split(',').some(n=>(f.airline+n.trim()).toUpperCase()===key)) return false; }
-  if (qs.durHi !== null) { if (f.dur > qs.durHi) return false; }
+  if (qs.durHi !== null) { if (f.dur > qs.durHi * 60) return false; }
   // Departs in next X minutes (uses current UTC minutes-of-day)
   if (fi.departsEnable && f.depTime) {
     const now = new Date();
@@ -1526,7 +1558,7 @@ function rowHTML(f) {
                    selRoute.airline===f.airline && selRoute.ac===f.ac;
   const seasonBadge = f.season==='S' ? '<span class="badge badge-s">SUMMER</span>'
                     : f.season==='W' ? '<span class="badge badge-w">WINTER</span>' : '';
-  const cargoBadge = (f.acLabel||'').match(/freight|cargo|freighter|combi/i) ? '<span class="badge badge-cargo">CARGO</span>' : '';
+  const cargoBadge = isCargoAircraft(f.acLabel) ? '<span class="badge badge-cargo">CARGO</span>' : '';
   const fnNums = f.fns ? f.fns.split(',').map(n => f.airline+n).join(', ') : '';
   const depTimeStr = f.depTime ? f.depTime.slice(0,2)+':'+f.depTime.slice(2) : '';
   const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
@@ -1589,7 +1621,7 @@ function mobileCardHTML(f) {
                    selRoute.airline===f.airline && selRoute.ac===f.ac;
   const seasonBadge = f.season==='S' ? '<span class="badge badge-s">S</span>'
                     : f.season==='W' ? '<span class="badge badge-w">W</span>' : '';
-  const cargoBadge = (f.acLabel||'').match(/freight|cargo|freighter|combi/i) ? '<span class="badge badge-cargo">CARGO</span>' : '';
+  const cargoBadge = isCargoAircraft(f.acLabel) ? '<span class="badge badge-cargo">CARGO</span>' : '';
   const fnLabel = f.fns ? f.airline + f.fns.split(',')[0].trim() : (AL_MAP[f.airline]||f.airline);
   return `<div class="mcard${isActive?' active':''}" style="position:absolute;left:0;right:0;height:${MOBILE_ROW_H}px;">
     <div class="mcard-top">
@@ -1917,7 +1949,7 @@ function resetAll() {
   document.getElementById('dur-lo').value=0;
   document.getElementById('dur-hi').value=22;
   document.getElementById('yr-lo').value=1950;
-  document.getElementById('yr-hi').value=2024;
+  document.getElementById('yr-hi').value=2026;
   document.getElementById('specify-airport').checked=true;
   document.getElementById('airport-fields').style.display='';
   document.getElementById('departs-enable').checked=false;
@@ -1937,7 +1969,7 @@ function resetAll() {
   qs = { deps:[], arrs:[], airlines:[], airlineSet:new Set(), acFamilies:[], yearLo:null, yearHi:null, durHi:null, flightNum:null };
   history.replaceState(null,'','#');
   setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
-  setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
+  setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2026,'');
   selRoute=null; selFlightIdx=null;
   queueRender();
   document.getElementById('detail-panel').innerHTML='<div class="detail-empty">Select a flight to view route details</div>';
@@ -2048,7 +2080,7 @@ const DECADE_MAP = {
   '1970s':[1970,1979],'70s':[1970,1979],
   '1980s':[1980,1989],'80s':[1980,1989],
   '1990s':[1990,1999],'90s':[1990,1999],
-  '2000s':[2000,2009],'2010s':[2010,2019],'2020s':[2020,2024],
+  '2000s':[2000,2009],'2010s':[2010,2019],'2020s':[2020,2026],
 };
 
 function resolveAirport(token) {
@@ -2134,6 +2166,12 @@ function parseSmartSearch() {
   const addAirline = code => { if (!qs.airlines.includes(code)) { qs.airlines.push(code); qs.airlineSet.add(code); } };
   words.forEach((w, i) => {
     const tok = (upper[i] || w.toUpperCase());
+    // Duration keywords are checked first — "long" in particular would
+    // otherwise be shadowed by airport resolution (it happens to be the
+    // city name of Long Banga Airport, WB01) and never reach this branch.
+    if (/^(\d+)h$/.test(w)) { qs.durHi=parseInt(w); return; }
+    if (w==='short') { qs.durHi=3; return; }
+    if (w==='long') { qs.durHi=22; return; }
     // Airport resolution: ICAO (4-letter) or city name only — IATA is not recognized.
     const apResolved = resolveAirport(tok);
     if (apResolved) {
@@ -2151,14 +2189,10 @@ function parseSmartSearch() {
     // Aircraft aliases
     const acMatch = AC_ALIASES[w];
     if (acMatch) { if (!qs.acFamilies.includes(acMatch[0])) qs.acFamilies.push(acMatch[0]); return; }
-    // Duration
-    if (/^(\d+)h$/.test(w)) { qs.durHi=parseInt(w); return; }
-    if (w==='short') { qs.durHi=3; return; }
-    if (w==='long') { qs.durHi=22; return; }
     // Exact year
     if (/^\d{4}$/.test(w)) {
       const y=parseInt(w);
-      if (y>=1950&&y<=2024) {
+      if (y>=1950&&y<=2026) {
         if (qs.yearLo===null) { qs.yearLo=y; qs.yearHi=y; }
         else { qs.yearLo=Math.min(qs.yearLo,y); qs.yearHi=Math.max(qs.yearHi,y); }
       }
@@ -2256,7 +2290,7 @@ document.querySelectorAll('input[name=andor]').forEach(r => r.addEventListener('
 
 // ── INIT ──
 setupDual('dur-lo','dur-hi','dur-lo-v','dur-hi-v','dur-fill',0,22,'h');
-setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2024,'');
+setupDual('yr-lo','yr-hi','yr-lo-v','yr-hi-v','yr-fill',1950,2026,'');
 
 // ── URL HASH STATE ────────────────────────────────────────────────────────
 function encodeState() {
@@ -2267,6 +2301,7 @@ function encodeState() {
   if (qs.acFamilies.length) parts.push('ac=' + qs.acFamilies.map(encodeURIComponent).join(','));
   if (qs.yearLo !== null) parts.push('y=' + qs.yearLo + '-' + qs.yearHi);
   if (qs.durHi !== null)  parts.push('dur=' + qs.durHi);
+  if (qs.flightNum !== null) parts.push('flt=' + encodeURIComponent(qs.flightNum));
   const hash = parts.length ? '#' + parts.join('&') : '#';
   history.replaceState(null, '', hash);
 }
@@ -2283,6 +2318,7 @@ function decodeState() {
   if (params.ac) { qs.acFamilies = params.ac.split(',').filter(Boolean).map(decodeURIComponent); }
   if (params.y)  { const [lo,hi]=params.y.split('-'); qs.yearLo=parseInt(lo); qs.yearHi=parseInt(hi); }
   if (params.dur){ qs.durHi = parseInt(params.dur); }
+  if (params.flt){ qs.flightNum = decodeURIComponent(params.flt); }
 
   // Populate the search box display
   const pills = [
@@ -2292,6 +2328,7 @@ function decodeState() {
     ...qs.acFamilies.map(f => ({label:`AC: ${familyDisplayLabel(f)}`,cls:'token-ac'})),
     ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
     ...(qs.durHi!==null  ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
+    ...(qs.flightNum!==null ? [{label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`,cls:'token-airline'}] : []),
   ];
   if (pills.length) {
     document.getElementById('smart-tokens').innerHTML = pills.map(p=>`<span class="token ${p.cls}">${p.label}</span>`).join('');
