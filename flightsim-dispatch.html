@@ -500,7 +500,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
       <div class="changelog-icon"><i class="ti ti-file-text" aria-hidden="true"></i></div>
       <div>
         <div class="changelog-title" id="changelog-title">What's New</div>
-        <div class="changelog-sub">Route Database Update</div>
+        <div class="changelog-sub">August 1, 2026 · Route Database Update</div>
       </div>
     </div>
     <div class="changelog-body">
@@ -1209,6 +1209,23 @@ function acFamilyMatches(fam, code, label) {
   return label.includes(fam);
 }
 
+// Human-readable label for a family filter value (e.g. "CODES:A221" ->
+// "Airbus A220-100"). Prefers the dropdown option's own text when the value
+// matches one exactly; otherwise derives a label from the aircraft it
+// resolves to (used by aliases like "bcs1"/"bcs3" that have no dropdown
+// entry of their own).
+function familyDisplayLabel(fam) {
+  const opt = document.querySelector(`#ac-family-picker option[value="${fam.replace(/"/g,'&quot;')}"]`);
+  if (opt) return opt.textContent;
+  if (fam.startsWith('CODES:')) {
+    const codes = fam.slice(6).split(',');
+    const labels = [...new Set(codes.map(c => AC_MAP[c]).filter(Boolean))];
+    if (labels.length === 1) return labels[0];
+    if (labels.length > 1) return labels[0] + ' +' + (labels.length - 1) + ' more';
+  }
+  return fam;
+}
+
 function matchesFilters(f, fi) {
   // Manual filters
   if (fi.acFamilies.length) {
@@ -1341,8 +1358,7 @@ function acVariantToggle(code) {
 function renderAcTags() {
   const wrap = document.getElementById('ac-family-tags');
   wrap.innerHTML = [...selAcFamilies].map(fam => {
-    const opt = document.querySelector(`#ac-family-picker option[value="${fam.replace(/"/g,'&quot;')}"]`);
-    const label = opt ? opt.textContent : fam;
+    const label = familyDisplayLabel(fam);
     // encode fam for safe inline onclick
     const safeFam = encodeURIComponent(fam);
     return `<span class="ac-tag"><span>${label}</span><span class="ac-tag-x" title="Remove" onclick="acFamilyRemove(decodeURIComponent('${safeFam}'))">×</span></span>`;
@@ -2061,7 +2077,7 @@ function removeToken(type, value) {
     ...qs.deps.map(d => ({type:'dep',value:d,label:`DEP: ${d}`})),
     ...qs.arrs.map(a => ({type:'arr',value:a,label:`ARR: ${a}`})),
     ...qs.airlines.map(a => ({type:'airline',value:a,label:AL_MAP[a]||a})),
-    ...qs.acFamilies.map(f => ({type:'ac',value:f,label:`AC: ${f}`})),
+    ...qs.acFamilies.map(f => ({type:'ac',value:f,label:`AC: ${familyDisplayLabel(f)}`})),
     ...(qs.yearLo!==null ? [{type:'year',value:'year',label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`}] : []),
     ...(qs.durHi!==null  ? [{type:'dur',value:'dur',label:`≤${qs.durHi}h`}] : []),
     ...(qs.flightNum!==null ? [{type:'flt',value:'flt',label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`}] : []),
@@ -2180,7 +2196,7 @@ function parseSmartSearch() {
     ...qs.deps.map(d => {const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}}),
     ...qs.arrs.map(a => {const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}}),
     ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
-    ...qs.acFamilies.map(f => ({label:`AC: ${f}`,cls:'token-ac'})),
+    ...qs.acFamilies.map(f => ({label:`AC: ${familyDisplayLabel(f)}`,cls:'token-ac'})),
     ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
     ...(qs.durHi!==null ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
     ...(qs.flightNum!==null ? [{label:`FLT: ${qs.airlines.length?qs.airlines[0]:''}${qs.flightNum}`,cls:'token-airline'}] : []),
@@ -2191,7 +2207,7 @@ function parseSmartSearch() {
     ...qs.deps.map(d => ({type:'dep',value:d,cls:'token-dep',label:`DEP: ${d}${AP_MAP[d]?' ('+AP_MAP[d][1]+')':''}`})),
     ...qs.arrs.map(a => ({type:'arr',value:a,cls:'token-arr',label:`ARR: ${a}${AP_MAP[a]?' ('+AP_MAP[a][1]+')':''}`})),
     ...qs.airlines.map(a => ({type:'airline',value:a,cls:'token-airline',label:AL_MAP[a]||a})),
-    ...qs.acFamilies.map(f => ({type:'ac',value:f,cls:'token-ac',label:`AC: ${f}`})),
+    ...qs.acFamilies.map(f => ({type:'ac',value:f,cls:'token-ac',label:`AC: ${familyDisplayLabel(f)}`})),
     ...(qs.yearLo!==null ? [{type:'year',value:'year',cls:'token-year',label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`}] : []),
     ...(qs.durHi!==null  ? [{type:'dur',value:'dur',cls:'token-dur',label:`≤${qs.durHi}h`}] : []),
     ...(qs.flightNum!==null ? [{type:'flt',value:'flt',cls:'token-airline',label:`FLT: ${qs.airlines[0]||''}${qs.flightNum}`}] : []),
@@ -2273,7 +2289,7 @@ function decodeState() {
     ...qs.deps.map(d  => { const a=AP_MAP[d]; return {label:`DEP: ${d}${a?' ('+a[1]+')':''}`,cls:'token-dep'}; }),
     ...qs.arrs.map(a  => { const ap=AP_MAP[a]; return {label:`ARR: ${a}${ap?' ('+ap[1]+')':''}`,cls:'token-arr'}; }),
     ...qs.airlines.map(a => ({label:`${AL_MAP[a]||a}`,cls:'token-airline'})),
-    ...qs.acFamilies.map(f => ({label:`AC: ${f}`,cls:'token-ac'})),
+    ...qs.acFamilies.map(f => ({label:`AC: ${familyDisplayLabel(f)}`,cls:'token-ac'})),
     ...(qs.yearLo!==null ? [{label:qs.yearLo===qs.yearHi?`${qs.yearLo}`:`${qs.yearLo}–${qs.yearHi}`,cls:'token-year'}] : []),
     ...(qs.durHi!==null  ? [{label:`≤${qs.durHi}h`,cls:'token-dur'}] : []),
   ];
