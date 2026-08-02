@@ -61,6 +61,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .titlebar-sub { font-size:11px; color:var(--text3); font-family:var(--mono); }
 .titlebar-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
 .titlebar-version { font-size:10px; font-family:var(--mono); color:var(--text3); }
+.titlebar-version-link { cursor:pointer; transition:color .15s cubic-bezier(.4,0,.2,1); border-bottom:1px dashed transparent; }
+.titlebar-version-link:hover { color:var(--accent); border-bottom-color:rgba(217,119,87,.4); }
 #load-status { font-size:11px; font-family:var(--mono); color:var(--amber); }
 
 /* ── BODY SPLIT ── */
@@ -426,9 +428,105 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .dual-wrap { padding:10px 0; }
   .dual-wrap input[type=range]::-webkit-slider-thumb { width:20px; height:20px; }
 }
+
+/* ── CHANGELOG POPUP ── */
+.changelog-backdrop {
+  position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px);
+  display:flex; align-items:center; justify-content:center; z-index:200; padding:20px;
+  opacity:0; animation:cl-fade-in .35s ease forwards;
+}
+.changelog-backdrop.closing { animation:cl-fade-out .22s ease forwards; }
+@keyframes cl-fade-in { from{opacity:0;} to{opacity:1;} }
+@keyframes cl-fade-out { from{opacity:1;} to{opacity:0;} }
+
+.changelog-card {
+  width:min(440px, 100%); max-height:82vh; overflow-y:auto;
+  background:var(--bg2); border:1px solid var(--border2); border-radius:10px;
+  box-shadow:0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(217,119,87,0.08);
+  transform:translateY(18px) scale(.97); opacity:0;
+  animation:cl-pop-in .45s cubic-bezier(.16,1,.3,1) .05s forwards;
+}
+.changelog-backdrop.closing .changelog-card { animation:cl-pop-out .2s ease forwards; }
+@keyframes cl-pop-in { to{ transform:translateY(0) scale(1); opacity:1; } }
+@keyframes cl-pop-out { to{ transform:translateY(10px) scale(.97); opacity:0; } }
+
+.changelog-header { padding:18px 20px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:11px; }
+.changelog-icon {
+  width:34px; height:34px; border-radius:8px; flex-shrink:0;
+  background:var(--accent-dim); color:var(--accent);
+  display:flex; align-items:center; justify-content:center; font-size:17px;
+  animation:cl-icon-pop .5s cubic-bezier(.34,1.56,.64,1) .18s backwards;
+}
+@keyframes cl-icon-pop { from{ transform:scale(0) rotate(-20deg); } to{ transform:scale(1) rotate(0deg); } }
+.changelog-title { font-size:15px; font-weight:600; color:var(--text); }
+.changelog-sub { font-size:11px; color:var(--text3); font-family:var(--mono); margin-top:1px; }
+
+.changelog-body { padding:14px 20px 4px; }
+.changelog-item { display:flex; gap:10px; padding:8px 0; opacity:0; transform:translateX(-6px); animation:cl-item-in .4s ease forwards; }
+.changelog-item:nth-child(1){animation-delay:.14s}
+.changelog-item:nth-child(2){animation-delay:.21s}
+.changelog-item:nth-child(3){animation-delay:.28s}
+.changelog-item:nth-child(4){animation-delay:.35s}
+.changelog-item:nth-child(5){animation-delay:.42s}
+@keyframes cl-item-in { to{ opacity:1; transform:translateX(0); } }
+.changelog-item-icon {
+  flex-shrink:0; width:22px; height:22px; border-radius:6px; margin-top:1px;
+  display:flex; align-items:center; justify-content:center; font-size:12px;
+}
+.changelog-item-icon.add { background:var(--green-dim); color:var(--green-bright); }
+.changelog-item-icon.fix { background:var(--amber-dim); color:var(--amber); }
+.changelog-item-icon.plane { background:var(--accent-dim); color:var(--accent); }
+.changelog-item-text { font-size:12.5px; color:var(--text2); line-height:1.5; }
+.changelog-item-text b { color:var(--text); font-weight:600; }
+
+.changelog-footer { padding:16px 20px 20px; }
+.changelog-btn {
+  width:100%; padding:9px 0; border-radius:var(--r); border:1px solid rgba(217,119,87,.35);
+  background:var(--accent-dim); color:var(--accent); font-family:var(--sans);
+  font-size:12.5px; font-weight:600; cursor:pointer;
+  transition:background .18s cubic-bezier(.4,0,.2,1), color .18s, box-shadow .18s, transform .12s cubic-bezier(.4,0,.2,1);
+}
+.changelog-btn:hover { background:var(--accent); color:#fff; box-shadow:0 0 0 3px rgba(217,119,87,0.18); }
+.changelog-btn:active { transform:scale(.97); }
 </style>
 </head>
 <body>
+<div id="changelog-backdrop" class="changelog-backdrop" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="changelog-title">
+  <div class="changelog-card">
+    <div class="changelog-header">
+      <div class="changelog-icon"><i class="ti ti-sparkles" aria-hidden="true"></i></div>
+      <div>
+        <div class="changelog-title" id="changelog-title">What's New</div>
+        <div class="changelog-sub">Route Database Update</div>
+      </div>
+    </div>
+    <div class="changelog-body">
+      <div class="changelog-item">
+        <div class="changelog-item-icon add"><i class="ti ti-plus" aria-hidden="true"></i></div>
+        <div class="changelog-item-text"><b>1.8M+ new routes added</b> — the database now covers <b>2,342,293 routes</b> spanning 1950 through 2024, more than 3x the previous size.</div>
+      </div>
+      <div class="changelog-item">
+        <div class="changelog-item-icon fix"><i class="ti ti-tool" aria-hidden="true"></i></div>
+        <div class="changelog-item-text"><b>Fixed a bug</b> where roughly 90,000 routes showed no flight duration — every route now has an accurate block time.</div>
+      </div>
+      <div class="changelog-item">
+        <div class="changelog-item-icon plane"><i class="ti ti-plane" aria-hidden="true"></i></div>
+        <div class="changelog-item-text"><b>93 new aircraft families</b> added to the filter — classic propliners (DC-3, DC-4, DC-6, DC-7), British classics (Comet, Britannia, Trident, Viscount), Soviet-era types (Antonov, Ilyushin, Tupolev), and dozens of regional/commuter aircraft.</div>
+      </div>
+      <div class="changelog-item">
+        <div class="changelog-item-icon add"><i class="ti ti-map-pin" aria-hidden="true"></i></div>
+        <div class="changelog-item-text"><b>104 new airports</b> and dozens of new airlines added.</div>
+      </div>
+      <div class="changelog-item">
+        <div class="changelog-item-icon fix"><i class="ti ti-adjustments-horizontal" aria-hidden="true"></i></div>
+        <div class="changelog-item-text">General search, filtering, and reliability improvements.</div>
+      </div>
+    </div>
+    <div class="changelog-footer">
+      <button class="changelog-btn" onclick="closeChangelog()">Got it</button>
+    </div>
+  </div>
+</div>
 <div id="loading-overlay" class="loading-overlay">
   <div class="loading-spinner"></div>
   <div class="loading-text" id="loading-text">Initializing FlightSim Dispatch...</div>
@@ -439,7 +537,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   <div class="titlebar">
     <span class="titlebar-logo">FlightSim Dispatch</span>
     <span class="titlebar-sep"></span>
-    <span class="titlebar-sub">v3.0 · Historical Route Database</span>
+    <span class="titlebar-sub titlebar-version-link" onclick="openChangelog()" title="View what's new">v3.1 · Historical Route Database</span>
     <div class="titlebar-right">
       <span id="load-status"></span>
     </div>
@@ -2149,6 +2247,35 @@ function decodeState() {
 }
 
 window.addEventListener('load', () => { loadData().then(() => { decodeState(); setTimeout(positionSortIndicator, 50); }); });
+
+// ── CHANGELOG POPUP ──
+// Shown once per browser (tracked via localStorage) after each dated update.
+// Also reachable any time via the "v3.1" link in the titlebar.
+const CHANGELOG_ID = '2026-08-02-route-update';
+function openChangelog() {
+  const el = document.getElementById('changelog-backdrop');
+  if (!el) return;
+  el.classList.remove('closing');
+  el.style.display = 'flex';
+}
+function closeChangelog() {
+  const el = document.getElementById('changelog-backdrop');
+  if (!el || el.style.display === 'none') return;
+  el.classList.add('closing');
+  setTimeout(() => { el.style.display = 'none'; el.classList.remove('closing'); }, 220);
+  try { localStorage.setItem('fsd_changelog_seen', CHANGELOG_ID); } catch (e) {}
+}
+(function initChangelog() {
+  const el = document.getElementById('changelog-backdrop');
+  if (!el) return;
+  el.addEventListener('click', (e) => { if (e.target === el) closeChangelog(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && el.style.display !== 'none') closeChangelog();
+  });
+  let seen = null;
+  try { seen = localStorage.getItem('fsd_changelog_seen'); } catch (e) {}
+  if (seen !== CHANGELOG_ID) openChangelog();
+})();
 window.addEventListener('resize', positionSortIndicator);
 </script>
 
