@@ -101,8 +101,9 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .smart-hint { font-size:10px; color:var(--text3); margin-top:4px; font-family:var(--mono); }
 
 /* ── SUGGEST A DESTINATION (AI prompt box) ── */
-.suggest-wrap { padding:10px 12px 10px; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--accent-dim2); }
+.suggest-wrap { padding:10px 12px; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--accent-dim2); display:flex; flex-direction:column; gap:6px; }
 .suggest-row { display:flex; gap:5px; }
+.suggest-row2 { display:flex; }
 .suggest-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--sans); font-size:12px; padding:5px 9px; outline:none; transition:border-color .15s; }
 .suggest-input:focus { border-color:var(--accent); }
 .suggest-input::placeholder { color:var(--text3); font-size:11px; }
@@ -110,32 +111,36 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .suggest-btn:hover { background:var(--accent2); }
 .suggest-btn:active { transform:scale(0.96); }
 .suggest-btn:disabled { opacity:.5; cursor:default; }
-.suggest-status { font-size:10px; color:var(--text3); margin-top:5px; font-family:var(--mono); min-height:12px; }
-.suggest-status.error { color:#e08383; }
-.suggest-results { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+#suggest-legs { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text2); font-family:var(--sans); font-size:11px; padding:4px 8px; cursor:pointer; }
 
-.sg-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:10px 12px; transition:border-color .15s; }
+/* Results live in the main panel's "Suggest" tab, not the sidebar --
+   there's no room next to the filters for more than one card. */
+.suggest-pane { padding:16px; overflow-y:auto; }
+.suggest-status { font-size:11px; color:var(--text3); margin-bottom:10px; font-family:var(--mono); min-height:14px; }
+.suggest-status.error { color:#e08383; }
+.suggest-results { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; align-content:start; }
+.suggest-empty-hint { display:none; color:var(--text3); font-size:13px; text-align:center; padding:80px 0; }
+.suggest-results:empty + .suggest-empty-hint { display:block; }
+
+.sg-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:12px 14px; transition:border-color .15s; }
 .sg-card:hover { border-color:var(--accent2); }
-.sg-badges { display:flex; gap:4px; align-items:center; min-height:14px; margin-bottom:4px; }
-.sg-badge { display:inline-flex; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:2px 7px; border-radius:999px; }
-.sg-badge.premium { background:rgba(124,58,237,.22); color:#c4b0fb; }
-.sg-badge.deluxe { background:rgba(37,99,235,.22); color:#a9c6fb; }
-.sg-badge.standard { background:var(--green-dim); color:var(--green-bright); }
-.sg-badge.native { background:var(--green-dim); color:var(--green); }
-.sg-badge.compatible { background:rgba(77,124,15,.2); color:#c3e07a; }
-.sg-badge.aa { background:var(--amber-dim); color:var(--amber); }
-.sg-leg-num { font-family:var(--mono); font-size:9px; color:var(--accent); font-weight:700; letter-spacing:.04em; }
-.sg-dest-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.sg-leg-num { font-family:var(--mono); font-size:9px; color:var(--accent); font-weight:700; letter-spacing:.04em; display:block; margin-bottom:4px; }
+.sg-dest-head { display:flex; align-items:center; gap:8px; }
+.sg-airline-logo { width:26px; height:26px; border-radius:5px; object-fit:contain; background:var(--bg4); flex-shrink:0; }
+.sg-dest-titles { flex:1; min-width:0; }
+.sg-dest-city-row { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
 .sg-dest-city { font-family:var(--sans); font-weight:700; font-size:16px; color:var(--text); }
 .sg-dest-icao { font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:600; }
 .sg-dest-name { font-size:10.5px; color:var(--text3); margin-top:1px; }
-.sg-sub { font-size:11px; color:var(--text2); margin-top:6px; }
-.sg-times { display:flex; align-items:center; gap:10px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:10.5px; }
-.sg-time-col { flex:1; }
-.sg-time-arrow { color:var(--text3); font-size:12px; }
-.sg-times .sg-t-label { color:var(--text3); text-transform:uppercase; font-size:8.5px; letter-spacing:.05em; }
-.sg-times .sg-t-utc { font-family:var(--mono); color:var(--text); font-weight:600; }
-.sg-times .sg-t-local { font-family:var(--mono); color:var(--text2); }
+.sg-sub { font-size:11px; color:var(--text2); margin-top:8px; }
+.sg-times { display:grid; grid-template-columns:1fr auto 1fr; grid-template-rows:auto auto auto; column-gap:10px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:10.5px; }
+.sg-time-col.dep { grid-column:1; grid-row:1/4; }
+.sg-time-col.arr { grid-column:3; grid-row:1/4; }
+.sg-time-arrow { grid-column:2; grid-row:2; align-self:center; color:var(--text3); font-size:13px; }
+.sg-t-label { color:var(--text3); text-transform:uppercase; font-size:8.5px; letter-spacing:.05em; }
+.sg-t-label .sg-dep-tag { font-family:var(--mono); color:var(--accent); text-transform:none; letter-spacing:0; margin-left:5px; }
+.sg-t-utc { font-family:var(--mono); color:var(--text); font-weight:600; }
+.sg-t-local { font-family:var(--mono); color:var(--text2); }
 
 /* ── FILTERS ── */
 .filters { padding:10px 12px; overflow-y:auto; flex-shrink:1; min-height:0; max-height:62vh; }
@@ -595,16 +600,25 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
     <!-- ══ LEFT PANEL ══ -->
     <div class="left">
 
-      <!-- Suggest a destination (AI prompt box) -->
+      <!-- Suggest a destination (AI prompt box) -- results render in the
+           main panel's "Suggest" tab (#suggest-pane), not here; there's no
+           room here for more than one card. -->
       <div class="suggest-wrap">
         <div class="smart-label">Suggest a destination</div>
         <div class="suggest-row">
           <input class="suggest-input" id="suggest-input" type="text"
-            placeholder='e.g. "flying from KDFW, something scenic, 777, only American, 3-leg trip"'>
+            placeholder='e.g. "flying from KDFW, something scenic, 777"'>
           <button class="suggest-btn" id="suggest-btn" onclick="suggestFromPrompt()">Suggest</button>
         </div>
-        <div class="suggest-status" id="suggest-status"></div>
-        <div class="suggest-results" id="suggest-results"></div>
+        <div class="suggest-row2">
+          <select id="suggest-legs">
+            <option value="">Single destination</option>
+            <option value="2">2-leg trip</option>
+            <option value="3">3-leg trip</option>
+            <option value="4">4-leg trip</option>
+            <option value="5">5-leg trip</option>
+          </select>
+        </div>
       </div>
 
       <!-- Quick search -->
@@ -957,6 +971,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
         <div class="view-toggle" id="view-toggle">
           <button class="view-toggle-btn active" data-view="table" onclick="setView('table')"><i class="ti ti-table" aria-hidden="true"></i> Table</button>
           <button class="view-toggle-btn" data-view="map" onclick="setView('map')"><i class="ti ti-globe" aria-hidden="true"></i> Map</button>
+          <button class="view-toggle-btn" data-view="suggest" onclick="setView('suggest')"><i class="ti ti-sparkles" aria-hidden="true"></i> Suggest</button>
         </div>
         <span class="sort-label">Sort:</span>
         <div class="sort-seg-wrap">
@@ -1010,6 +1025,11 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
             <span class="hint-touch">Drag to rotate · pinch to zoom · tap a route</span>
           </div>
           <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
+        </div>
+        <div class="suggest-pane view-pane view-hidden" id="suggest-pane">
+          <div class="suggest-status" id="suggest-status"></div>
+          <div class="suggest-results" id="suggest-results"></div>
+          <div class="suggest-empty-hint" id="suggest-empty-hint">Describe what you want to fly on the left, then hit Suggest.</div>
         </div>
       </div>
 
@@ -1972,10 +1992,6 @@ function sceneryTierRank(icao) {
   return 0;
 }
 
-function sceneryTierLabel(rank) {
-  return { 5:'premium', 4:'deluxe', 3:'standard', 2:'native', 1:'compatible', 0:null }[rank];
-}
-
 // Pure UTC-instant comparison against SunCalc's sunrise/sunset for the
 // destination's lat/lon — deliberately no timezone lookup anywhere here.
 // 2 = golden hour, 1 = daylight, 0 = night.
@@ -2110,52 +2126,59 @@ function buildChain(startIcao, understood, legs) {
 // it's the interesting part of the suggestion. Origin is just a bare ICAO
 // chip ("from KDFW") since the visitor already knows where they're
 // departing from; repeating its full name on every card/leg was clutter.
-function sgDestBlock(icao) {
-  const ap = AP_MAP[icao] || [icao, '', ''];
-  const city = ap[1] || ap[0] || icao;
-  return `
-    <div class="sg-dest-head">
-      <span class="sg-dest-city">${city}</span>
-      <span class="sg-dest-icao">${icao}</span>
-    </div>
-    <div class="sg-dest-name">${ap[0]}${ap[2] ? ', ' + ap[2] : ''}</div>`;
+// Airhex's free logo API is keyed directly by airline ICAO/IATA code --
+// no local logo-code mapping table needed, works for any airline the
+// prompt names. Hidden on 404 (not every airline has a logo there) rather
+// than showing a broken-image icon.
+function sgAirlineLogo(icao) {
+  return `<img class="sg-airline-logo" src="https://content.airhex.com/content/logos/airlines_${icao}_100_100_s.png" alt="" onerror="this.style.display='none'">`;
 }
 
-function sgTimesRow(depDate, arrDate) {
+function sgDestBlock(f) {
+  const ap = AP_MAP[f.arr] || [f.arr, '', ''];
+  const city = ap[1] || ap[0] || f.arr;
+  return `
+    <div class="sg-dest-head">
+      ${sgAirlineLogo(f.airline)}
+      <div class="sg-dest-titles">
+        <div class="sg-dest-city-row">
+          <span class="sg-dest-city">${city}</span>
+          <span class="sg-dest-icao">${f.arr}</span>
+        </div>
+        <div class="sg-dest-name">${ap[0]}${ap[2] ? ', ' + ap[2] : ''}</div>
+      </div>
+    </div>`;
+}
+
+// Departure ICAO shows only here, as a small muted tag next to the DEPART
+// label -- not repeated as a full airport name elsewhere on the card.
+function sgTimesRow(depIcao, depDate, arrDate) {
   const dep = fmtUtcLocal(depDate), arr = fmtUtcLocal(arrDate);
   return `
     <div class="sg-times">
-      <div class="sg-time-col"><div class="sg-t-label">Depart</div><div class="sg-t-utc">${dep.utc}</div><div class="sg-t-local">${dep.local}</div></div>
+      <div class="sg-time-col dep"><div class="sg-t-label">Depart<span class="sg-dep-tag">${depIcao}</span></div><div class="sg-t-utc">${dep.utc}</div><div class="sg-t-local">${dep.local}</div></div>
       <div class="sg-time-arrow">&rarr;</div>
-      <div class="sg-time-col"><div class="sg-t-label">Arrive</div><div class="sg-t-utc">${arr.utc}</div><div class="sg-t-local">${arr.local}</div></div>
+      <div class="sg-time-col arr"><div class="sg-t-label">Arrive</div><div class="sg-t-utc">${arr.utc}</div><div class="sg-t-local">${arr.local}</div></div>
     </div>`;
 }
 
 function renderSingleSuggestion(picked) {
-  const label = sceneryTierLabel(picked.tier);
-  const badges = [];
-  if (label) badges.push(`<span class="sg-badge ${label}">${label}</span>`);
-  if (picked.f.airline === 'AAL') badges.push('<span class="sg-badge aa">AA</span>');
   return `
     <div class="sg-card">
-      <div class="sg-badges">${badges.join(' ')}</div>
-      ${sgDestBlock(picked.f.arr)}
-      <div class="sg-sub">from <span class="td-mono">${picked.f.dep}</span> · ${AL_MAP[picked.f.airline]||picked.f.airline} (${picked.f.airline}) · ${picked.f.acLabel||picked.f.ac} · ${formatDur(picked.f.dur)}</div>
-      ${sgTimesRow(picked.depUtc, picked.arrivalUtc || picked.arrUtc)}
+      ${sgDestBlock(picked.f)}
+      <div class="sg-sub">${AL_MAP[picked.f.airline]||picked.f.airline} · ${picked.f.acLabel||picked.f.ac} · ${formatDur(picked.f.dur)}</div>
+      ${sgTimesRow(picked.f.dep, picked.depUtc, picked.arrivalUtc || picked.arrUtc)}
     </div>`;
 }
 
 function renderChain(chain) {
-  return chain.map(leg => {
-    const label = sceneryTierLabel(leg.tier);
-    return `
+  return chain.map(leg => `
       <div class="sg-card">
-        <div class="sg-badges"><span class="sg-leg-num">LEG ${leg.leg}</span> ${label ? `<span class="sg-badge ${label}">${label}</span>` : ''}</div>
-        ${sgDestBlock(leg.f.arr)}
-        <div class="sg-sub">from <span class="td-mono">${leg.f.dep}</span> · ${AL_MAP[leg.f.airline]||leg.f.airline} (${leg.f.airline}) · ${leg.f.acLabel||leg.f.ac} · ${formatDur(leg.f.dur)} · ${leg.reason}</div>
-        ${sgTimesRow(leg.depUtc, leg.arrUtc)}
-      </div>`;
-  }).join('');
+        <span class="sg-leg-num">LEG ${leg.leg}</span>
+        ${sgDestBlock(leg.f)}
+        <div class="sg-sub">${AL_MAP[leg.f.airline]||leg.f.airline} · ${leg.f.acLabel||leg.f.ac} · ${formatDur(leg.f.dur)} · ${leg.reason}</div>
+        ${sgTimesRow(leg.f.dep, leg.depUtc, leg.arrUtc)}
+      </div>`).join('');
 }
 
 async function suggestFromPrompt() {
@@ -2165,6 +2188,7 @@ async function suggestFromPrompt() {
   const prompt = document.getElementById('suggest-input').value.trim();
   if (!prompt) return;
 
+  setView('suggest');
   btn.disabled = true;
   status.textContent = 'Asking AI…';
   status.classList.remove('error');
@@ -2175,6 +2199,12 @@ async function suggestFromPrompt() {
     const dep = understood.dep || (document.getElementById('dep').value.trim().toUpperCase().split(',')[0] || '');
     if (!dep) throw new Error('Name a departure airport (e.g. "flying from KDFW…")');
     if (!IDX_DEP.has(dep)) throw new Error(`No routes found departing ${dep}`);
+
+    // The "N-leg trip" selector is an explicit override -- if set, it wins
+    // regardless of whether the prompt itself mentioned a trip, so multi-leg
+    // planning doesn't depend on phrasing it just right in English.
+    const legsSel = document.getElementById('suggest-legs').value;
+    if (legsSel) { understood.multileg = true; understood.legs = parseInt(legsSel); }
 
     status.textContent = 'Understood: ' + JSON.stringify(understood);
     const nowUtc = new Date(); // single reference instant for this request -- reused everywhere below
@@ -2205,12 +2235,12 @@ async function suggestFromPrompt() {
         }
         picks.sort((a, b) => b.score - a.score);
         if (!picks.length) throw new Error('No scenic destinations matched — try relaxing the request');
-        results.innerHTML = picks.slice(0,5).map(p => renderSingleSuggestion(p, understood)).join('');
+        results.innerHTML = picks.slice(0,5).map(p => renderSingleSuggestion(p)).join('');
       } else {
         const picked = pickBestRoute(cands, understood, true, nowUtc);
         if (!picked) throw new Error('No scenic destinations matched — try relaxing the request');
         picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin*60000);
-        results.innerHTML = renderSingleSuggestion(picked, understood);
+        results.innerHTML = renderSingleSuggestion(picked);
       }
     }
     status.textContent = '';
@@ -2224,6 +2254,15 @@ async function suggestFromPrompt() {
 
 document.getElementById('suggest-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') suggestFromPrompt();
+});
+// Clearing the prompt clears whatever's currently shown -- results
+// shouldn't linger once the text that produced them is gone.
+document.getElementById('suggest-input').addEventListener('input', (e) => {
+  if (!e.target.value.trim()) {
+    document.getElementById('suggest-results').innerHTML = '';
+    document.getElementById('suggest-status').textContent = '';
+    document.getElementById('suggest-status').classList.remove('error');
+  }
 });
 
 // ── RESET ──
@@ -2250,16 +2289,20 @@ function setView(view) {
   const tableWrap = document.getElementById('table-wrap');
   const mobileList = document.getElementById('mobile-card-list');
   const globeWrap = document.getElementById('globe-wrap');
+  const suggestPane = document.getElementById('suggest-pane');
 
-  // Both panes stay mounted and overlap (position:absolute via .view-pane) —
-  // toggling .view-hidden crossfades opacity between them instead of an
-  // instant display swap. display itself still tracks table-vs-cards per
-  // viewport (base CSS / mobile media query), untouched here.
+  // All three panes stay mounted and overlap (position:absolute via
+  // .view-pane) — toggling .view-hidden crossfades opacity between them
+  // instead of an instant display swap. display itself still tracks
+  // table-vs-cards per viewport (base CSS / mobile media query), untouched
+  // here.
+  tableHead.style.display = view === 'table' ? '' : 'none';
+  tableWrap.classList.toggle('view-hidden', view !== 'table');
+  mobileList.classList.toggle('view-hidden', view !== 'table');
+  globeWrap.classList.toggle('view-hidden', view !== 'map');
+  suggestPane.classList.toggle('view-hidden', view !== 'suggest');
+
   if (view === 'map') {
-    tableHead.style.display = 'none';
-    tableWrap.classList.add('view-hidden');
-    mobileList.classList.add('view-hidden');
-    globeWrap.classList.remove('view-hidden');
     if (window.FSD_Globe) {
       Promise.resolve(window.FSD_Globe.init()).then(() => {
         window.FSD_Globe.update(lastFilteredRows);
@@ -2267,12 +2310,8 @@ function setView(view) {
       });
     }
   } else {
-    tableHead.style.display = '';
-    tableWrap.classList.remove('view-hidden');
-    mobileList.classList.remove('view-hidden');
-    globeWrap.classList.add('view-hidden');
     // Let the fade-out finish before pausing the render loop, so it doesn't freeze mid-fade.
-    if (window.FSD_Globe) setTimeout(() => { if (currentView === 'table') window.FSD_Globe.hide(); }, VIEW_TRANSITION_MS);
+    if (window.FSD_Globe) setTimeout(() => { if (currentView !== 'map') window.FSD_Globe.hide(); }, VIEW_TRANSITION_MS);
   }
 }
 function toggleAirlineField() {} // removed - airline field always visible
