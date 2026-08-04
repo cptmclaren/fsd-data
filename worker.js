@@ -12,7 +12,17 @@ var CORS_HEADERS = {
 // The key itself lives only in this Worker's secret store (wrangler secret
 // put GROQ_API_KEY), never in this file, never sent to a client.
 var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-var GROQ_MODEL = "llama-3.3-70b-versatile";
+// Groq's free-tier token-per-day quota is tracked PER MODEL, not
+// account-wide (confirmed via a real 429: "Rate limit reached for model
+// llama-3.3-70b-versatile ... tokens per day (TPD): Limit 100000"). Heavy
+// testing of /ai-rank's larger candidate-list payloads exhausted that
+// model's whole daily budget and took /ai-parse down with it, since they
+// shared one model/quota. Splitting them onto separate models means a
+// busy day for one doesn't starve the other, and /ai-parse's simpler
+// structured-extraction task doesn't need the bigger model's reasoning at
+// all -- smaller models also get a much larger free-tier daily quota.
+var GROQ_MODEL_PARSE = "llama-3.1-8b-instant";
+var GROQ_MODEL_RANK = "llama-3.3-70b-versatile"; // scenic judgment needs the more capable model
 var MAX_PROMPT_LEN = 300;
 // A coarse global daily cap, not per-visitor -- cheap (1 KV write/request,
 // well under the free-tier write budget) and enough to stop the endpoint
@@ -112,9 +122,11 @@ function corsJson(body, status) {
 }
 
 // Shared low-level Groq call -- both /ai-parse and /ai-rank use this.
-// Throws Error("request") for network/HTTP failures, Error("parse") if the
+// Throws Error("request:<detail>") for network/HTTP failures (detail is
+// the upstream status/body so failures are actually diagnosable instead
+// of a generic "AI request failed" every time), Error("parse") if the
 // model's output isn't valid JSON -- callers map these to user-facing text.
-async function callGroq(env, systemPrompt, userContent, maxTokens, temperature) {
+async function callGroq(env, model, systemPrompt, userContent, maxTokens, temperature) {
   let resp;
   try {
     resp = await fetch(GROQ_URL, {
@@ -124,7 +136,7 @@ async function callGroq(env, systemPrompt, userContent, maxTokens, temperature) 
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
+        model: model,
         temperature: temperature != null ? temperature : 0,
         max_tokens: maxTokens,
         response_format: { type: "json_object" },
@@ -135,9 +147,13 @@ async function callGroq(env, systemPrompt, userContent, maxTokens, temperature) 
       })
     });
   } catch (e) {
-    throw new Error("request");
+    throw new Error("request:network error contacting Groq");
   }
-  if (!resp.ok) throw new Error("request");
+  if (!resp.ok) {
+    let bodyText = "";
+    try { bodyText = (await resp.text()).slice(0, 300); } catch {}
+    throw new Error(`request:Groq HTTP ${resp.status} ${bodyText}`);
+  }
   try {
     const payload = await resp.json();
     return JSON.parse(payload.choices[0].message.content);
@@ -207,10 +223,10 @@ async function handleAiParse(request, env) {
   }
 
   try {
-    const parsed = await callGroq(env, SYSTEM_PROMPT, prompt, 300);
+    const parsed = await callGroq(env, GROQ_MODEL_PARSE, SYSTEM_PROMPT, prompt, 300);
     return corsJson({ understood: sanitizeParsed(parsed) });
   } catch (e) {
-    return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : "AI request failed" }, 502);
+    return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
   }
 }
 
@@ -290,10 +306,10 @@ async function handleAiRank(request, env) {
   });
 
   try {
-    const parsed = await callGroq(env, RANK_SYSTEM_PROMPT, userContent, 800, 0.3);
+    const parsed = await callGroq(env, GROQ_MODEL_RANK, RANK_SYSTEM_PROMPT, userContent, 800, 0.3);
     return corsJson({ picks: sanitizeRankPicks(parsed, validIcaos) });
   } catch (e) {
-    return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : "AI request failed" }, 502);
+    return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
   }
 }
 // ──────────────────────────────────────────────────────────────────────
