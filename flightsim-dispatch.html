@@ -114,22 +114,28 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .suggest-status.error { color:#e08383; }
 .suggest-results { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
 
-.sg-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:8px 10px; }
-.sg-badge { display:inline-flex; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:1px 6px; border-radius:999px; margin-right:4px; }
+.sg-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:10px 12px; transition:border-color .15s; }
+.sg-card:hover { border-color:var(--accent2); }
+.sg-badges { display:flex; gap:4px; align-items:center; min-height:14px; margin-bottom:4px; }
+.sg-badge { display:inline-flex; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:2px 7px; border-radius:999px; }
 .sg-badge.premium { background:rgba(124,58,237,.22); color:#c4b0fb; }
 .sg-badge.deluxe { background:rgba(37,99,235,.22); color:#a9c6fb; }
 .sg-badge.standard { background:var(--green-dim); color:var(--green-bright); }
 .sg-badge.native { background:var(--green-dim); color:var(--green); }
 .sg-badge.compatible { background:rgba(77,124,15,.2); color:#c3e07a; }
 .sg-badge.aa { background:var(--amber-dim); color:var(--amber); }
-.sg-route { font-family:var(--mono); font-weight:600; font-size:12.5px; margin:2px 0; }
-.sg-sub { font-size:10.5px; color:var(--text2); }
-.sg-times { display:flex; gap:14px; margin-top:5px; font-size:10.5px; }
+.sg-leg-num { font-family:var(--mono); font-size:9px; color:var(--accent); font-weight:700; letter-spacing:.04em; }
+.sg-dest-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.sg-dest-city { font-family:var(--sans); font-weight:700; font-size:16px; color:var(--text); }
+.sg-dest-icao { font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:600; }
+.sg-dest-name { font-size:10.5px; color:var(--text3); margin-top:1px; }
+.sg-sub { font-size:11px; color:var(--text2); margin-top:6px; }
+.sg-times { display:flex; align-items:center; gap:10px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); font-size:10.5px; }
+.sg-time-col { flex:1; }
+.sg-time-arrow { color:var(--text3); font-size:12px; }
 .sg-times .sg-t-label { color:var(--text3); text-transform:uppercase; font-size:8.5px; letter-spacing:.05em; }
-.sg-times .sg-t-utc { font-family:var(--mono); color:var(--text); }
+.sg-times .sg-t-utc { font-family:var(--mono); color:var(--text); font-weight:600; }
 .sg-times .sg-t-local { font-family:var(--mono); color:var(--text2); }
-.sg-reason { font-size:10.5px; color:var(--text3); margin-top:4px; }
-.sg-leg-num { font-family:var(--mono); font-size:9px; color:var(--accent); font-weight:700; }
 
 /* ── FILTERS ── */
 .filters { padding:10px 12px; overflow-y:auto; flex-shrink:1; min-height:0; max-height:62vh; }
@@ -2014,6 +2020,11 @@ function fmtUtcLocal(date) {
 // Score + pick the best route among candidates already filtered to depart
 // from the right place / match aircraft+airline. `hardScenic`: only used for
 // a multi-leg trip's final leg (intermediate legs are just connections).
+// Hard-requires tier>=3 (Volanta's curated handcrafted premium/deluxe/
+// standard list) -- NOT tier 1/2 (FSD's Native/Compatible, which just mean
+// "some addon exists for this airport," true of plenty of unscenic major
+// hubs like ORD/LAX purely because they're big and popular, not because
+// they're scenic). "Scenic" here means the curated list only.
 // `nowUtc` is the instant wheels-up is measured from -- for a single
 // suggestion that's real "now"; for a chain it's the previous leg's arrival,
 // which the caller must pass explicitly (never call new Date() in here --
@@ -2024,7 +2035,7 @@ function pickBestRoute(candidates, understood, hardScenic, nowUtc) {
   let best = null, bestScore = -Infinity;
   for (const f of candidates) {
     const tier = sceneryTierRank(f.arr);
-    if (hardScenic && tier === 0) continue;
+    if (hardScenic && tier < 3) continue;
     const geo = window.AIRPORT_GEO && window.AIRPORT_GEO[f.arr];
     const arrivalUtc = new Date(nowUtc.getTime() + (departInMin + f.dur) * 60000);
     let timeComponent = 0;
@@ -2095,42 +2106,54 @@ function buildChain(startIcao, understood, legs) {
   return itinerary;
 }
 
-function sgAirportLine(icao) {
+// Destination gets the full treatment (city headline, full name, country) --
+// it's the interesting part of the suggestion. Origin is just a bare ICAO
+// chip ("from KDFW") since the visitor already knows where they're
+// departing from; repeating its full name on every card/leg was clutter.
+function sgDestBlock(icao) {
   const ap = AP_MAP[icao] || [icao, '', ''];
-  return `<span class="td-mono">${icao}</span> — ${ap[0]}${ap[1] ? ', ' + ap[1] : ''}`;
+  const city = ap[1] || ap[0] || icao;
+  return `
+    <div class="sg-dest-head">
+      <span class="sg-dest-city">${city}</span>
+      <span class="sg-dest-icao">${icao}</span>
+    </div>
+    <div class="sg-dest-name">${ap[0]}${ap[2] ? ', ' + ap[2] : ''}</div>`;
 }
 
-function renderSingleSuggestion(picked, understood) {
-  const tier = picked.tier, label = sceneryTierLabel(tier);
+function sgTimesRow(depDate, arrDate) {
+  const dep = fmtUtcLocal(depDate), arr = fmtUtcLocal(arrDate);
+  return `
+    <div class="sg-times">
+      <div class="sg-time-col"><div class="sg-t-label">Depart</div><div class="sg-t-utc">${dep.utc}</div><div class="sg-t-local">${dep.local}</div></div>
+      <div class="sg-time-arrow">&rarr;</div>
+      <div class="sg-time-col"><div class="sg-t-label">Arrive</div><div class="sg-t-utc">${arr.utc}</div><div class="sg-t-local">${arr.local}</div></div>
+    </div>`;
+}
+
+function renderSingleSuggestion(picked) {
+  const label = sceneryTierLabel(picked.tier);
   const badges = [];
-  badges.push(label ? `<span class="sg-badge ${label}">${label}</span>` : '');
+  if (label) badges.push(`<span class="sg-badge ${label}">${label}</span>`);
   if (picked.f.airline === 'AAL') badges.push('<span class="sg-badge aa">AA</span>');
-  const dep = fmtUtcLocal(picked.depUtc), arr = fmtUtcLocal(picked.arrivalUtc || picked.arrUtc);
   return `
     <div class="sg-card">
-      <div>${badges.join(' ')}</div>
-      <div class="sg-route">${sgAirportLine(picked.f.dep)} &rarr; ${sgAirportLine(picked.f.arr)}</div>
-      <div class="sg-sub">${AL_MAP[picked.f.airline]||picked.f.airline} (${picked.f.airline}) · ${picked.f.acLabel||picked.f.ac} · ${formatDur(picked.f.dur)}</div>
-      <div class="sg-times">
-        <div><div class="sg-t-label">Depart UTC / local</div><div class="sg-t-utc">${dep.utc}</div><div class="sg-t-local">${dep.local}</div></div>
-        <div><div class="sg-t-label">Arrive UTC / local</div><div class="sg-t-utc">${arr.utc}</div><div class="sg-t-local">${arr.local}</div></div>
-      </div>
+      <div class="sg-badges">${badges.join(' ')}</div>
+      ${sgDestBlock(picked.f.arr)}
+      <div class="sg-sub">from <span class="td-mono">${picked.f.dep}</span> · ${AL_MAP[picked.f.airline]||picked.f.airline} (${picked.f.airline}) · ${picked.f.acLabel||picked.f.ac} · ${formatDur(picked.f.dur)}</div>
+      ${sgTimesRow(picked.depUtc, picked.arrivalUtc || picked.arrUtc)}
     </div>`;
 }
 
 function renderChain(chain) {
   return chain.map(leg => {
-    const tier = leg.tier, label = sceneryTierLabel(tier);
-    const dep = fmtUtcLocal(leg.depUtc), arr = fmtUtcLocal(leg.arrUtc);
+    const label = sceneryTierLabel(leg.tier);
     return `
       <div class="sg-card">
-        <div><span class="sg-leg-num">LEG ${leg.leg}</span> ${label ? `<span class="sg-badge ${label}">${label}</span>` : ''}</div>
-        <div class="sg-route">${sgAirportLine(leg.f.dep)} &rarr; ${sgAirportLine(leg.f.arr)}</div>
-        <div class="sg-sub">${AL_MAP[leg.f.airline]||leg.f.airline} (${leg.f.airline}) · ${leg.f.acLabel||leg.f.ac} · ${formatDur(leg.f.dur)} · ${leg.reason}</div>
-        <div class="sg-times">
-          <div><div class="sg-t-label">Depart UTC / local</div><div class="sg-t-utc">${dep.utc}</div><div class="sg-t-local">${dep.local}</div></div>
-          <div><div class="sg-t-label">Arrive UTC / local</div><div class="sg-t-utc">${arr.utc}</div><div class="sg-t-local">${arr.local}</div></div>
-        </div>
+        <div class="sg-badges"><span class="sg-leg-num">LEG ${leg.leg}</span> ${label ? `<span class="sg-badge ${label}">${label}</span>` : ''}</div>
+        ${sgDestBlock(leg.f.arr)}
+        <div class="sg-sub">from <span class="td-mono">${leg.f.dep}</span> · ${AL_MAP[leg.f.airline]||leg.f.airline} (${leg.f.airline}) · ${leg.f.acLabel||leg.f.ac} · ${formatDur(leg.f.dur)} · ${leg.reason}</div>
+        ${sgTimesRow(leg.depUtc, leg.arrUtc)}
       </div>`;
   }).join('');
 }
@@ -2165,11 +2188,13 @@ async function suggestFromPrompt() {
       const cands = candidatesFor(dep, understood, new Set([dep]));
       if (!cands.length) throw new Error(`No matching routes departing ${dep}`);
       if (understood.mode === 'list') {
-        // Top 5 distinct destinations by score, hard-requiring scenery
+        // Top 5 distinct destinations by score, hard-requiring the curated
+        // handcrafted list (tier>=3) -- see pickBestRoute's comment on why
+        // FSD's Native/Compatible tiers don't count as "scenic" here.
         const byDest = new Map();
         for (const f of cands) {
           const tier = sceneryTierRank(f.arr);
-          if (tier === 0) continue;
+          if (tier < 3) continue;
           if (!byDest.has(f.arr)) byDest.set(f.arr, []);
           byDest.get(f.arr).push(f);
         }
