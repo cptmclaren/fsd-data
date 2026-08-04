@@ -275,7 +275,16 @@ async function handleAiParse(request, env) {
 // client-side, since flight time and daylight quality are objective, not a
 // preference call). Volanta's curated tags are passed only as a hint the
 // model may use or ignore, not a filter.
-var MAX_RANK_CANDIDATES = 150;
+// Cut from 150 -- this is the dominant cost of an /ai-rank call (roughly
+// 15-20 tokens/candidate x 150 ~= 2500+ tokens, versus ~300 for the fixed
+// system prompt), and it's the actual lever for handling several visitors
+// hitting Suggest in the same minute: Groq's TPM cap (not the daily one)
+// is what a real simultaneous-user burst would hit first, and every
+// candidate cut buys more concurrent requests that fit in that window.
+// Curated-tier candidates are still sorted first (see destCandidatesFor),
+// so this trims long-tail obscure destinations before it ever touches the
+// ones actually likely to be picked.
+var MAX_RANK_CANDIDATES = 60;
 
 var RANK_SYSTEM_PROMPT = `A flight-sim pilot wants a scenic destination suggestion. You will be
 given their request and a list of candidate airports that are actually
