@@ -2091,8 +2091,8 @@ async function callAiRank(prompt, candidates, count) {
 // that's the granularity the AI reasons over. Curated-tier candidates are
 // sorted first so they survive the /ai-rank request-size cap even when a
 // departure has hundreds of historical destinations.
-function destCandidatesFor(depIcao, understood, excludeArr) {
-  const routes = candidatesFor(depIcao, understood, excludeArr);
+function destCandidatesFor(depIcao, understood, excludeArr, maxDurMin) {
+  const routes = candidatesFor(depIcao, understood, excludeArr, maxDurMin);
   const byDest = new Map();
   for (const f of routes) {
     if (!byDest.has(f.arr)) byDest.set(f.arr, []);
@@ -2150,7 +2150,31 @@ function pickBestRoute(candidates, nowUtc, targetUtc, departInMin) {
   return best;
 }
 
-function candidatesFor(depIcao, understood, excludeArr) {
+// `maxDurMin`, if given, caps block time -- used ONLY for a multi-leg
+// trip's *intermediate* connecting hops (a realistic same-day rotation
+// needs short domestic-range legs). It must NOT apply anywhere else: a
+// single "something scenic" suggestion, a one-way trip's actual final
+// destination, and a round trip's outbound/return legs can legitimately
+// be a long-haul flight (Honolulu, a transatlantic island, etc.) -- this
+// was previously a hardcoded, unconditional 240min cutoff on every call
+// site, silently excluding those from ever being suggested at all. A
+// round trip's own deadline tolerance already self-regulates feasibility
+// for long-haul picks, so no separate cap is needed there.
+// Picks whichever route arrives soonest (shortest block time, since
+// departInMin is constant across candidates) -- used for a round trip's
+// outbound leg specifically when there's a deadline to protect: burning
+// extra time on a daylight-optimal but slower outbound option eats into
+// the margin available to actually make the return deadline.
+function pickSoonestRoute(candidates, nowUtc, departInMin) {
+  let best = null, bestArrival = Infinity;
+  for (const f of candidates) {
+    const arrivalUtc = new Date(nowUtc.getTime() + (departInMin + f.dur) * 60000);
+    if (arrivalUtc.getTime() < bestArrival) { bestArrival = arrivalUtc.getTime(); best = { f, tier: sceneryTierRank(f.arr), arrivalUtc, departInMin }; }
+  }
+  return best;
+}
+
+function candidatesFor(depIcao, understood, excludeArr, maxDurMin) {
   const rows = (IDX_DEP.get(depIcao) || []).map(i => DB[i]);
   return rows.filter(f => {
     if (excludeArr && excludeArr.has(f.arr)) return false;
@@ -2171,7 +2195,7 @@ function candidatesFor(depIcao, understood, excludeArr) {
       if (!match) return false;
     }
     if (understood.airline && f.airline !== understood.airline) return false;
-    if (f.dur > 240) return false; // domestic-range hop cap, matches the private tool's default
+    if (maxDurMin && f.dur > maxDurMin) return false;
     return true;
   });
 }
@@ -2191,7 +2215,9 @@ async function buildChain(prompt, startIcao, understood, legs) {
     const isFinal = i === legs - 1;
 
     if (!isFinal) {
-      const cands = candidatesFor(current, understood, used);
+      // Only intermediate connecting hops get the domestic-range cap --
+      // the final destination (below) is deliberately uncapped.
+      const cands = candidatesFor(current, understood, used, 240);
       if (!cands.length) return null;
       const picked = pickBestRoute(cands, nowUtc, null, departInMin);
       if (!picked) return null;
@@ -2243,7 +2269,12 @@ async function buildRoundTrip(prompt, startIcao, understood) {
 
   for (const pick of picks) {
     const outRoutes = byDest.get(pick.icao);
-    const outPicked = pickBestRoute(outRoutes, outNowUtc, null, departInMin); // no deadline pressure outbound
+    // With a deadline to protect, take the soonest outbound option to
+    // preserve maximum margin for the return leg; otherwise (an open-ended
+    // day trip) prefer whichever arrival has the best light.
+    const outPicked = targetUtc
+      ? pickSoonestRoute(outRoutes, outNowUtc, departInMin)
+      : pickBestRoute(outRoutes, outNowUtc, null, departInMin);
     if (!outPicked) continue;
 
     const returnRoutes = candidatesFor(pick.icao, understood, new Set()).filter(f => f.arr === startIcao);
