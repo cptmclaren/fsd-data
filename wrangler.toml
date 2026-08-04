@@ -1,0 +1,7 @@
+name = "fsd-data"
+main = "worker.js"
+compatibility_date = "2026-06-04"
+
+[[kv_namespaces]]
+binding = "FSD_DATA"
+id = "a27e5e6624814943a031394fa3206b7c"
