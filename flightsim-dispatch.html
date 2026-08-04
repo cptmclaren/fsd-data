@@ -2105,7 +2105,10 @@ function destCandidatesFor(depIcao, understood, excludeArr, maxDurMin) {
 
 function destInfo(icao) {
   const ap = AP_MAP[icao] || [icao, '', ''];
-  const info = { icao, city: ap[1] || ap[0] || icao, country: ap[2] || '' };
+  // Full airport name, not just city, goes to the AI -- a bare city name
+  // is often ambiguous (e.g. "Jackson" could be Jackson, MS or Jackson
+  // Hole, WY near the Tetons) and the airport name usually disambiguates.
+  const info = { icao, name: ap[0] || icao, city: ap[1] || ap[0] || icao, country: ap[2] || '' };
   const label = { 5: 'premium', 4: 'deluxe', 3: 'standard' }[sceneryTierRank(icao)];
   if (label) info.curatedTier = label;
   return info;

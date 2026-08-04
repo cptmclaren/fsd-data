@@ -15,14 +15,19 @@ var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // Groq's free-tier token-per-day quota is tracked PER MODEL, not
 // account-wide (confirmed via a real 429: "Rate limit reached for model
 // llama-3.3-70b-versatile ... tokens per day (TPD): Limit 100000"). Heavy
-// testing of /ai-rank's larger candidate-list payloads exhausted that
-// model's whole daily budget and took /ai-parse down with it, since they
-// shared one model/quota. Splitting them onto separate models means a
-// busy day for one doesn't starve the other, and /ai-parse's simpler
-// structured-extraction task doesn't need the bigger model's reasoning at
-// all -- smaller models also get a much larger free-tier daily quota.
-var GROQ_MODEL_PARSE = "llama-3.1-8b-instant";
-var GROQ_MODEL_RANK = "llama-3.3-70b-versatile"; // scenic judgment needs the more capable model
+// testing exhausted that model's whole daily budget for one day.
+// Tried splitting /ai-parse onto llama-3.1-8b-instant to isolate it from
+// /ai-rank's heavier daily quota use -- reverted: reproducibly worse at
+// this exact task (e.g. consistently hallucinated mode:"list" on "flying
+// from KDFW, something scenic", a plain single-destination request with
+// no list/options language at all; llama-3.3-70b-versatile got it right
+// every time, verified directly against the same prompt). Both endpoints
+// now share the same primary (proven reliable for both extraction and
+// geographic reasoning) with the same fallback -- if its daily quota is
+// ever exhausted by real traffic, the whole pipeline degrades together
+// to gpt-oss-20b rather than only half of it silently getting worse.
+var GROQ_MODELS_PARSE = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
+var GROQ_MODELS_RANK = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
 var MAX_PROMPT_LEN = 300;
 // A coarse global daily cap, not per-visitor -- cheap (1 KV write/request,
 // well under the free-tier write budget) and enough to stop the endpoint
@@ -55,9 +60,13 @@ var AC_FAMILY_TAGS = [
 
 var SYSTEM_PROMPT = `You translate a flight-sim pilot's plain-English request for what to
 fly next into a JSON object of route-suggestion parameters. Only include a
-key if the request clearly implies a value for it -- omit anything not
-mentioned so sensible defaults apply elsewhere. Reply with ONLY a JSON
-object, no prose, no markdown fences.
+key if the request CLEARLY AND EXPLICITLY implies a value for it. When in
+doubt, omit the key -- an empty object {} is a perfectly good answer for a
+vague request like "something scenic" with nothing else said. Do not infer
+a time, a mode, or anything else just because a request happens to mention
+travel -- every key below needs its own real textual evidence in the
+request, not a guess. Reply with ONLY a JSON object, no prose, no markdown
+fences.
 
 Keys you may set:
   dep: departure airport ICAO code (4 letters, uppercase), if named or
@@ -122,44 +131,63 @@ function corsJson(body, status) {
 }
 
 // Shared low-level Groq call -- both /ai-parse and /ai-rank use this.
-// Throws Error("request:<detail>") for network/HTTP failures (detail is
-// the upstream status/body so failures are actually diagnosable instead
-// of a generic "AI request failed" every time), Error("parse") if the
-// model's output isn't valid JSON -- callers map these to user-facing text.
-async function callGroq(env, model, systemPrompt, userContent, maxTokens, temperature) {
-  let resp;
-  try {
-    resp = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GROQ_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: model,
-        temperature: temperature != null ? temperature : 0,
-        max_tokens: maxTokens,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent }
-        ]
-      })
-    });
-  } catch (e) {
-    throw new Error("request:network error contacting Groq");
+// `models` is tried IN ORDER, advancing to the next one only on a 429
+// (rate/quota limit) -- Groq's free tier tracks quota per model, so a
+// busy day for the first choice doesn't have to mean total failure, just
+// a fallback to a less-preferred model until the primary's quota clears.
+// Any other failure (network, non-429 HTTP error, bad JSON) fails
+// immediately without burning through the fallback list pointlessly.
+// Throws Error("request:<detail>") for failures (detail is the upstream
+// status/body so failures are actually diagnosable), Error("parse") if
+// the model's output isn't valid JSON.
+async function callGroq(env, models, systemPrompt, userContent, maxTokens, temperature) {
+  let lastErr = null;
+  for (const model of models) {
+    let resp;
+    try {
+      resp = await fetch(GROQ_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: model,
+          temperature: temperature != null ? temperature : 0,
+          max_tokens: maxTokens,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent }
+          ]
+        })
+      });
+    } catch (e) {
+      throw new Error("request:network error contacting Groq");
+    }
+    if (!resp.ok) {
+      let bodyText = "";
+      try { bodyText = (await resp.text()).slice(0, 300); } catch {}
+      // Fall back to the next model on quota exhaustion (429) OR a model-
+      // side generation failure (400 json_validate_failed -- seen in
+      // practice as an empty completion from the smaller model, not a
+      // problem with what we sent). Any other failure (genuinely bad
+      // request, auth, etc.) fails immediately instead of wasting the
+      // rest of the fallback list on something no model will fix.
+      if (resp.status === 429 || (resp.status === 400 && bodyText.includes("json_validate_failed"))) {
+        lastErr = new Error(`request:Groq HTTP ${resp.status} (${model}) ${bodyText}`);
+        continue;
+      }
+      throw new Error(`request:Groq HTTP ${resp.status} ${bodyText}`);
+    }
+    try {
+      const payload = await resp.json();
+      return JSON.parse(payload.choices[0].message.content);
+    } catch (e) {
+      throw new Error("parse");
+    }
   }
-  if (!resp.ok) {
-    let bodyText = "";
-    try { bodyText = (await resp.text()).slice(0, 300); } catch {}
-    throw new Error(`request:Groq HTTP ${resp.status} ${bodyText}`);
-  }
-  try {
-    const payload = await resp.json();
-    return JSON.parse(payload.choices[0].message.content);
-  } catch (e) {
-    throw new Error("parse");
-  }
+  throw lastErr || new Error("request:all models at capacity");
 }
 
 function sanitizeParsed(parsed) {
@@ -223,7 +251,14 @@ async function handleAiParse(request, env) {
   }
 
   try {
-    const parsed = await callGroq(env, GROQ_MODEL_PARSE, SYSTEM_PROMPT, prompt, 300);
+    // 1000, not 300 -- the primary (non-reasoning) model never needs
+    // anywhere near that for a short JSON object, but the gpt-oss-20b
+    // fallback is a reasoning model that burns tokens on invisible
+    // chain-of-thought before the visible JSON; too tight a cap here
+    // starves it mid-thought and it returns nothing (a real failure seen
+    // in testing, not hypothetical). Raising the ceiling costs nothing
+    // for the primary path since it's billed on tokens actually used.
+    const parsed = await callGroq(env, GROQ_MODELS_PARSE, SYSTEM_PROMPT, prompt, 2000);
     return corsJson({ understood: sanitizeParsed(parsed) });
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
@@ -244,9 +279,14 @@ var MAX_RANK_CANDIDATES = 150;
 
 var RANK_SYSTEM_PROMPT = `A flight-sim pilot wants a scenic destination suggestion. You will be
 given their request and a list of candidate airports that are actually
-reachable (ICAO, city, country, and an optional curatedTier hint --
-"premium"/"deluxe"/"standard" if a flight-sim scenery add-on curator rates
-it, absent if not). Use your own knowledge of world geography -- coastlines,
+reachable (ICAO, the airport's full name, city, country, and an optional
+curatedTier hint -- "premium"/"deluxe"/"standard" if a flight-sim scenery
+add-on curator rates it, absent if not). The full airport name is there to
+disambiguate same-named cities in different places (e.g. a bare city name
+"Jackson" is ambiguous between Jackson, Mississippi and Jackson Hole,
+Wyoming near the Tetons -- the airport name usually resolves this; use it,
+don't guess from the city name alone). Use your own knowledge of world
+geography -- coastlines,
 mountains, islands, dramatic approaches, iconic skylines -- to judge which
 candidates are genuinely scenic and best match what they asked for. The
 curatedTier hint is a data point, not a rule; you may pick a candidate
@@ -300,13 +340,13 @@ async function handleAiRank(request, env) {
     request: prompt || "something scenic",
     wantCount: count,
     candidates: candidates.map(c => ({
-      icao: c.icao, city: c.city, country: c.country,
+      icao: c.icao, name: c.name, city: c.city, country: c.country,
       ...(c.curatedTier ? { curatedTier: c.curatedTier } : {})
     })),
   });
 
   try {
-    const parsed = await callGroq(env, GROQ_MODEL_RANK, RANK_SYSTEM_PROMPT, userContent, 800, 0.3);
+    const parsed = await callGroq(env, GROQ_MODELS_RANK, RANK_SYSTEM_PROMPT, userContent, 2200, 0.3);
     return corsJson({ picks: sanitizeRankPicks(parsed, validIcaos) });
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
