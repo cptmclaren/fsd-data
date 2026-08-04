@@ -63,15 +63,34 @@ Keys you may set:
     ["747N:Boeing 747"]; "757" -> ["Boeing 757"]; "767" -> ["Boeing 767"].
   airline: 3-letter ICAO airline code, if named or clearly implied
     ("American"/"AA" -> "AAL", "British Airways" -> "BAW", etc.).
-  arriveUtc: "HH:MM" 24h UTC/Zulu wall-clock arrival time, ONLY if they name
-    an actual clock time or an unambiguous anchor like "midnight" (->
-    "00:00") or "noon" (-> "12:00"). Do NOT set this for vague lighting
-    preferences like "sunset" or "during the day" -- those are handled by
-    separate scenic/daylight ranking, not a clock target.
+  arriveLocal: "HH:MM" 24h wall-clock arrival/deadline time, taken
+    LITERALLY from whatever clock time or anchor word they said, in THE
+    PILOT'S OWN LOCAL TIME -- this is the default for any bare time
+    mention ("tonight 11pm" -> "23:00", "by 6pm" -> "18:00", "midnight" ->
+    "00:00", "noon" -> "12:00", "9pm my time" -> "21:00"). Almost every
+    casual mention of a time means their own local time, not Zulu -- use
+    this field unless they explicitly say otherwise (see arriveUtc).
+    IMPORTANT: just copy the HH:MM they said -- do NOT attempt to convert
+    it to UTC or guess a timezone offset yourself; the app converts local
+    to UTC using the visitor's own browser timezone, which you don't know
+    and shouldn't guess at. Do NOT set this for vague lighting preferences
+    like "sunset" or "during the day" -- those are handled by separate
+    scenic/daylight ranking, not a clock target.
+  arriveUtc: "HH:MM" 24h UTC/Zulu time, copied literally -- ONLY if they
+    explicitly say "Zulu"/"UTC" or give a time with a "Z" suffix (e.g.
+    "2300Z", "18:00 UTC"). Rare, technical aviation phrasing. If in doubt
+    between this and arriveLocal, use arriveLocal.
+  returnToOrigin: true if the request describes a there-and-back trip
+    that ends up at the SAME airport it started from. Trigger words:
+    "round trip", "day trip", "round-trip", "back at <the departure
+    airport>", "back home", "return to <the departure airport>". Check
+    for these words independently of whatever else you set -- don't let
+    setting arriveLocal/dep distract you from also checking this.
   departInMin: integer minutes from now until wheels-up, only if a specific
     lead time is stated ("in an hour" -> 60, "in 30" -> 30).
-  multileg: true if they describe a multi-stop/multi-leg trip/rotation,
-    else omit.
+  multileg: true if they describe a one-way multi-stop/connecting
+    itinerary that does NOT return to the start, else omit. Do not set
+    this together with returnToOrigin -- those are different trip shapes.
   legs: integer 2-5, only if multileg is true and a count is implied (omit
     to default to 3 if multileg but no count given).
   mode: "list" only if they ask for options/choices/a few ideas, else omit
@@ -95,7 +114,7 @@ function corsJson(body, status) {
 // Shared low-level Groq call -- both /ai-parse and /ai-rank use this.
 // Throws Error("request") for network/HTTP failures, Error("parse") if the
 // model's output isn't valid JSON -- callers map these to user-facing text.
-async function callGroq(env, systemPrompt, userContent, maxTokens) {
+async function callGroq(env, systemPrompt, userContent, maxTokens, temperature) {
   let resp;
   try {
     resp = await fetch(GROQ_URL, {
@@ -106,7 +125,7 @@ async function callGroq(env, systemPrompt, userContent, maxTokens) {
       },
       body: JSON.stringify({
         model: GROQ_MODEL,
-        temperature: 0.3, // a little reasoning latitude for subjective scenic judgment, unlike /ai-parse's pure extraction
+        temperature: temperature != null ? temperature : 0,
         max_tokens: maxTokens,
         response_format: { type: "json_object" },
         messages: [
@@ -139,9 +158,14 @@ function sanitizeParsed(parsed) {
   if (typeof parsed.airline === "string" && /^[A-Za-z]{3}$/.test(parsed.airline)) {
     out.airline = parsed.airline.toUpperCase();
   }
-  if (typeof parsed.arriveUtc === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.arriveUtc)) {
+  const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (typeof parsed.arriveLocal === "string" && timeRe.test(parsed.arriveLocal)) {
+    out.arriveLocal = parsed.arriveLocal;
+  }
+  if (typeof parsed.arriveUtc === "string" && timeRe.test(parsed.arriveUtc)) {
     out.arriveUtc = parsed.arriveUtc;
   }
+  if (typeof parsed.returnToOrigin === "boolean") out.returnToOrigin = parsed.returnToOrigin;
   if (Number.isInteger(parsed.departInMin) && parsed.departInMin >= 0 && parsed.departInMin <= 1440) {
     out.departInMin = parsed.departInMin;
   }
@@ -266,7 +290,7 @@ async function handleAiRank(request, env) {
   });
 
   try {
-    const parsed = await callGroq(env, RANK_SYSTEM_PROMPT, userContent, 800);
+    const parsed = await callGroq(env, RANK_SYSTEM_PROMPT, userContent, 800, 0.3);
     return corsJson({ picks: sanitizeRankPicks(parsed, validIcaos) });
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : "AI request failed" }, 502);

@@ -165,8 +165,8 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .trip-node-through .trip-t-local { display:block; margin-left:0; margin-top:1px; color:var(--text3); font-size:10.5px; }
 .trip-node-reason { font-size:11px; color:var(--text2); font-style:italic; margin-top:4px; line-height:1.4; }
 .trip-connector { display:flex; gap:12px; }
-.trip-connector-line-col { width:12px; display:flex; justify-content:center; flex-shrink:0; }
-.trip-connector-line { width:2px; flex:1; background:var(--border2); min-height:20px; }
+.trip-connector-line-col { width:12px; display:flex; justify-content:center; align-items:center; flex-shrink:0; }
+.trip-connector-arrow { font-size:20px; line-height:1; color:var(--text3); }
 .trip-connector-label { flex:1; font-size:10.5px; color:var(--text3); padding:6px 0; }
 
 /* ── FILTERS ── */
@@ -2032,14 +2032,29 @@ function daylightScore(utcDate, lat, lon) {
   return 0;
 }
 
-// Wrap-aware minutes between two HH:MM-equivalent instants, both as minutes-
-// since-midnight-UTC. Mirrors _time_diff_minutes from the private tool.
-function utcTimeDiffMinutes(actualDate, targetHHMM) {
-  const [th, tm] = targetHHMM.split(':').map(Number);
-  const targetMin = th*60 + tm;
-  const actualMin = actualDate.getUTCHours()*60 + actualDate.getUTCMinutes();
-  const diff = Math.abs(actualMin - targetMin);
-  return Math.min(diff, 1440 - diff);
+// Resolves whichever deadline field the AI set into one concrete absolute
+// instant. arriveLocal (the common case -- "back by 11pm" means THEIR
+// local time) is converted using `new Date(y,m,d,h,mi)`'s local-component
+// constructor, which does local->UTC conversion automatically via the
+// browser's own timezone -- no IANA lookup, no geocoding needed. arriveUtc
+// (rare, explicit Zulu mentions) is built the same way via Date.UTC.
+// Rolls forward a day if the resulting instant is already passed, since
+// "tonight 11pm" said at 11:30pm means tomorrow, not 30 minutes ago.
+function resolveTargetUtc(understood) {
+  const now = new Date();
+  const rollForward = d => {
+    if (d.getTime() < now.getTime() - 5 * 60000) d.setDate(d.getDate() + 1);
+    return d;
+  };
+  if (understood.arriveLocal) {
+    const [h, m] = understood.arriveLocal.split(':').map(Number);
+    return rollForward(new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m));
+  }
+  if (understood.arriveUtc) {
+    const [h, m] = understood.arriveUtc.split(':').map(Number);
+    return rollForward(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m)));
+  }
+  return null;
 }
 
 async function callAiParse(prompt) {
@@ -2113,15 +2128,20 @@ function fmtUtcLocal(date) {
 // which the caller must pass explicitly (never call new Date() in here --
 // that caused arrivals to land before departures once legs 2+ used a stale
 // "now" instead of the chain's actual advancing clock).
-function pickBestRoute(candidates, understood, nowUtc) {
-  const departInMin = understood.departInMin != null ? understood.departInMin : 45;
+// `targetUtc` (from resolveTargetUtc, or null) is a concrete absolute
+// instant to get as close to as possible -- an plain instant diff, not a
+// same-day-only time-of-day comparison, so it's correct even across a
+// multi-leg trip that crosses midnight UTC. Falls back to daylight-quality
+// scoring when no deadline was given.
+function pickBestRoute(candidates, nowUtc, targetUtc, departInMin) {
+  if (departInMin == null) departInMin = 45;
   let best = null, bestScore = -Infinity;
   for (const f of candidates) {
     const geo = window.AIRPORT_GEO && window.AIRPORT_GEO[f.arr];
     const arrivalUtc = new Date(nowUtc.getTime() + (departInMin + f.dur) * 60000);
     let score = 0;
-    if (understood.arriveUtc) {
-      score = -utcTimeDiffMinutes(arrivalUtc, understood.arriveUtc);
+    if (targetUtc) {
+      score = -Math.abs(arrivalUtc.getTime() - targetUtc.getTime()) / 60000;
     } else if (geo) {
       score = daylightScore(arrivalUtc, geo[0], geo[1]);
     }
@@ -2165,6 +2185,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
   const used = new Set([startIcao]);
   let departInMin = understood.departInMin != null ? understood.departInMin : 45;
   let nowUtc = new Date();
+  const targetUtc = resolveTargetUtc(understood); // only applied to the final leg, below
 
   for (let i = 0; i < legs; i++) {
     const isFinal = i === legs - 1;
@@ -2172,7 +2193,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
     if (!isFinal) {
       const cands = candidatesFor(current, understood, used);
       if (!cands.length) return null;
-      const picked = pickBestRoute(cands, { departInMin }, nowUtc);
+      const picked = pickBestRoute(cands, nowUtc, null, departInMin);
       if (!picked) return null;
       itinerary.push({
         leg: i + 1, f: picked.f, tier: picked.tier,
@@ -2193,7 +2214,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
     const picks = await callAiRank(prompt, list, 1);
     if (!picks.length) return null;
     const routes = byDest.get(picks[0].icao);
-    const picked = pickBestRoute(routes, { ...understood, departInMin }, nowUtc);
+    const picked = pickBestRoute(routes, nowUtc, targetUtc, departInMin);
     if (!picked) return null;
     itinerary.push({
       leg: i + 1, f: picked.f, tier: picked.tier,
@@ -2202,6 +2223,50 @@ async function buildChain(prompt, startIcao, understood, legs) {
     });
   }
   return itinerary;
+}
+
+// Same shape as buildChain but a there-and-back trip: outbound leg picked
+// for scenic value, return leg forced back to startIcao and checked
+// against the resolved deadline within a tolerance -- if the best-ranked
+// destination can't get back in time (or has no direct route home at
+// all), the next AI-ranked destination is tried instead of giving up.
+async function buildRoundTrip(prompt, startIcao, understood) {
+  const targetUtc = resolveTargetUtc(understood);
+  const { byDest, list } = destCandidatesFor(startIcao, understood, new Set([startIcao]));
+  if (!list.length) return null;
+
+  const picks = await callAiRank(prompt, list, 5); // try several ranked destinations, not just the top one
+  const departInMin = understood.departInMin != null ? understood.departInMin : 45;
+  const outNowUtc = new Date();
+  const GROUND_MIN = 45;
+  const TOLERANCE_MIN = 90; // matches the private tool's established default
+
+  for (const pick of picks) {
+    const outRoutes = byDest.get(pick.icao);
+    const outPicked = pickBestRoute(outRoutes, outNowUtc, null, departInMin); // no deadline pressure outbound
+    if (!outPicked) continue;
+
+    const returnRoutes = candidatesFor(pick.icao, understood, new Set()).filter(f => f.arr === startIcao);
+    if (!returnRoutes.length) continue; // no direct route home from here -- try the next AI pick
+
+    const retPicked = pickBestRoute(returnRoutes, outPicked.arrivalUtc, targetUtc, GROUND_MIN);
+    if (!retPicked) continue;
+    if (targetUtc && Math.abs(retPicked.arrivalUtc.getTime() - targetUtc.getTime()) / 60000 > TOLERANCE_MIN) continue; // misses the deadline -- try next pick
+
+    return [
+      {
+        leg: 1, f: outPicked.f, tier: outPicked.tier,
+        depUtc: new Date(outNowUtc.getTime() + departInMin * 60000), arrUtc: outPicked.arrivalUtc,
+        reason: pick.reason || 'scenic destination',
+      },
+      {
+        leg: 2, f: retPicked.f, tier: retPicked.tier,
+        depUtc: new Date(outPicked.arrivalUtc.getTime() + GROUND_MIN * 60000), arrUtc: retPicked.arrivalUtc,
+        reason: '',
+      },
+    ];
+  }
+  return null;
 }
 
 // Destination gets the full treatment (city headline, full name, country) --
@@ -2310,9 +2375,18 @@ function renderChain(chain) {
     const isFinal = i === chain.length - 1;
     rows.push(`
       <div class="trip-connector">
-        <div class="trip-connector-line-col"><div class="trip-connector-line"></div></div>
+        <div class="trip-connector-line-col"><span class="trip-connector-arrow">↓</span></div>
         <div class="trip-connector-label">${leg.f.acLabel||leg.f.ac} · ${formatDur(leg.f.dur)}</div>
       </div>`);
+
+    // A leg's reason is only worth showing when it's an actual explanation
+    // (the AI's scenic pick) -- not the generic 'connection' placeholder,
+    // and not the empty string a round trip's return leg gets. Shown on
+    // whichever node that leg's arrival lands on, through or final --
+    // for a round trip the scenic reason is on the OUTBOUND leg, which is
+    // a through-node, not the final one.
+    const reasonHtml = (leg.reason && leg.reason !== 'connection')
+      ? `<div class="trip-node-reason">${leg.reason}</div>` : '';
 
     if (isFinal) {
       const t = fmtUtcLocal(leg.arrUtc);
@@ -2322,7 +2396,7 @@ function renderChain(chain) {
           <div class="trip-node-body">
             <div class="trip-node-city">${tripDestCity(leg.f.arr)} <span class="trip-node-icao">${leg.f.arr}</span></div>
             <div class="trip-node-time"><span class="trip-t-utc">${t.utc}</span><span class="trip-t-local">${t.local}</span></div>
-            ${leg.reason ? `<div class="trip-node-reason">${leg.reason}</div>` : ''}
+            ${reasonHtml}
           </div>
         </div>`);
     } else {
@@ -2335,6 +2409,7 @@ function renderChain(chain) {
           <div class="trip-node-body">
             <div class="trip-node-city">${tripDestCity(leg.f.arr)} <span class="trip-node-icao">${leg.f.arr}</span></div>
             <div class="trip-node-time"><span class="trip-t-utc">${a.utc} arr &rarr; ${d.utc} dep</span><span class="trip-t-local">${groundMin}m layover</span></div>
+            ${reasonHtml}
           </div>
         </div>`);
     }
@@ -2374,9 +2449,15 @@ async function suggestFromPrompt() {
 
     // The "N-leg trip" selector is an explicit override -- if set, it wins
     // regardless of whether the prompt itself mentioned a trip, so multi-leg
-    // planning doesn't depend on phrasing it just right in English.
-    const legsSel = document.getElementById('suggest-legs').value;
+    // planning doesn't depend on phrasing it just right in English. Reset
+    // right after reading it so it can't silently apply to a LATER,
+    // unrelated prompt -- that's exactly what happened once already (a
+    // "3-leg trip" left selected from earlier testing hijacked a completely
+    // different round-trip request with no visual reminder it was still set).
+    const legsSelEl = document.getElementById('suggest-legs');
+    const legsSel = legsSelEl.value;
     if (legsSel) { understood.multileg = true; understood.legs = parseInt(legsSel); }
+    legsSelEl.value = '';
 
     // This tool has no login/flight history for anyone -- say so plainly
     // rather than silently ignoring "places I've never been" style requests.
@@ -2384,7 +2465,12 @@ async function suggestFromPrompt() {
       ? 'Note: this tool has no flight history for anyone (no login) — ranking by scenic + timing only. '
       : '';
 
-    if (understood.multileg) {
+    if (understood.returnToOrigin) {
+      status.textContent = historyNote + 'Planning round trip…';
+      const trip = await buildRoundTrip(prompt, dep, understood);
+      if (!trip) throw new Error('No round trip found that gets you back in time — try relaxing the deadline or aircraft/airline');
+      results.innerHTML = renderChain(trip);
+    } else if (understood.multileg) {
       const legs = understood.legs || 3;
       status.textContent = historyNote + 'Planning trip…';
       const chain = await buildChain(prompt, dep, understood, legs);
@@ -2392,6 +2478,7 @@ async function suggestFromPrompt() {
       results.innerHTML = renderChain(chain);
     } else {
       const nowUtc = new Date();
+      const targetUtc = resolveTargetUtc(understood);
       const count = understood.mode === 'list' ? 5 : 1;
       const { byDest, list } = destCandidatesFor(dep, understood, new Set([dep]));
       if (!list.length) throw new Error(`No matching routes departing ${dep}`);
@@ -2403,7 +2490,7 @@ async function suggestFromPrompt() {
       const rendered = picks.map(p => {
         const routes = byDest.get(p.icao);
         if (!routes) return null;
-        const picked = pickBestRoute(routes, understood, nowUtc);
+        const picked = pickBestRoute(routes, nowUtc, targetUtc, understood.departInMin);
         if (!picked) return null;
         picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin * 60000);
         picked.reason = p.reason;
