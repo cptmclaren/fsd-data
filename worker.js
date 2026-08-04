@@ -17,8 +17,11 @@ var MAX_PROMPT_LEN = 300;
 // A coarse global daily cap, not per-visitor -- cheap (1 KV write/request,
 // well under the free-tier write budget) and enough to stop the endpoint
 // being drained as an open LLM relay unrelated to flight suggestions.
-// Revisit with real per-IP limiting if usage ever approaches this.
-var DAILY_CALL_CAP = 200;
+// Shared across /ai-parse and /ai-rank, and a single "Suggest" click now
+// costs both (parse the prompt, then rank candidates) -- 400 keeps the
+// same ~200 actual suggest-requests/day headroom as before this endpoint
+// existed. Revisit with real per-IP limiting if usage ever approaches this.
+var DAILY_CALL_CAP = 400;
 
 // Exact aircraft-family tag vocabulary flightsim-dispatch.html's picker
 // uses (see <select id="ac-family-picker"> in the HTML) -- the model must
@@ -72,13 +75,56 @@ Keys you may set:
   legs: integer 2-5, only if multileg is true and a count is implied (omit
     to default to 3 if multileg but no count given).
   mode: "list" only if they ask for options/choices/a few ideas, else omit
-    (defaults to a single confident pick elsewhere).`;
+    (defaults to a single confident pick elsewhere).
+  historyMentioned: true ONLY if the request references the pilot's own
+    past flying (e.g. "places I've never been", "somewhere I rarely fly",
+    "haven't visited in a while", "different from my last flight"). This
+    tool has no login and no flight history for anyone -- it cannot know
+    what they have or haven't flown. Setting this lets the UI tell them
+    that part of the request was ignored, instead of silently pretending
+    to honor it. Do not try to guess or approximate their history -- just
+    flag that they asked for it.`;
 
 function corsJson(body, status) {
   return new Response(JSON.stringify(body), {
     status: status || 200,
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
   });
+}
+
+// Shared low-level Groq call -- both /ai-parse and /ai-rank use this.
+// Throws Error("request") for network/HTTP failures, Error("parse") if the
+// model's output isn't valid JSON -- callers map these to user-facing text.
+async function callGroq(env, systemPrompt, userContent, maxTokens) {
+  let resp;
+  try {
+    resp = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.3, // a little reasoning latitude for subjective scenic judgment, unlike /ai-parse's pure extraction
+        max_tokens: maxTokens,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent }
+        ]
+      })
+    });
+  } catch (e) {
+    throw new Error("request");
+  }
+  if (!resp.ok) throw new Error("request");
+  try {
+    const payload = await resp.json();
+    return JSON.parse(payload.choices[0].message.content);
+  } catch (e) {
+    throw new Error("parse");
+  }
 }
 
 function sanitizeParsed(parsed) {
@@ -102,6 +148,7 @@ function sanitizeParsed(parsed) {
   if (typeof parsed.multileg === "boolean") out.multileg = parsed.multileg;
   if (Number.isInteger(parsed.legs) && parsed.legs >= 2 && parsed.legs <= 5) out.legs = parsed.legs;
   if (parsed.mode === "list" || parsed.mode === "single") out.mode = parsed.mode;
+  if (typeof parsed.historyMentioned === "boolean") out.historyMentioned = parsed.historyMentioned;
   return out;
 }
 
@@ -135,40 +182,94 @@ async function handleAiParse(request, env) {
     return corsJson({ error: "AI parsing is temporarily at capacity for today -- try the manual filters" }, 429);
   }
 
-  let groqResp;
   try {
-    groqResp = await fetch(GROQ_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GROQ_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0,
-        max_tokens: 300,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt }
-        ]
-      })
-    });
-  } catch (e) {
-    return corsJson({ error: "AI request failed" }, 502);
-  }
-  if (!groqResp.ok) {
-    return corsJson({ error: `AI request failed (${groqResp.status})` }, 502);
-  }
-
-  let payload;
-  try {
-    payload = await groqResp.json();
-    const raw = payload.choices[0].message.content;
-    const parsed = JSON.parse(raw);
+    const parsed = await callGroq(env, SYSTEM_PROMPT, prompt, 300);
     return corsJson({ understood: sanitizeParsed(parsed) });
   } catch (e) {
-    return corsJson({ error: "AI returned an unparseable response" }, 502);
+    return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : "AI request failed" }, 502);
+  }
+}
+
+// ── AI scenic-destination reasoning (new) ────────────────────────────────
+// Per explicit product decision: "scenic" is a subjective travel judgment,
+// not something a fixed list should decide. This asks the model to reason
+// about actual scenic quality (geography, coastlines, mountains, dramatic
+// approaches, etc.) over the real candidate destinations reachable from the
+// chosen departure -- it never invents a destination outside that list, and
+// it never picks the route/aircraft/time itself (that stays deterministic
+// client-side, since flight time and daylight quality are objective, not a
+// preference call). Volanta's curated tags are passed only as a hint the
+// model may use or ignore, not a filter.
+var MAX_RANK_CANDIDATES = 150;
+
+var RANK_SYSTEM_PROMPT = `A flight-sim pilot wants a scenic destination suggestion. You will be
+given their request and a list of candidate airports that are actually
+reachable (ICAO, city, country, and an optional curatedTier hint --
+"premium"/"deluxe"/"standard" if a flight-sim scenery add-on curator rates
+it, absent if not). Use your own knowledge of world geography -- coastlines,
+mountains, islands, dramatic approaches, iconic skylines -- to judge which
+candidates are genuinely scenic and best match what they asked for. The
+curatedTier hint is a data point, not a rule; you may pick a candidate
+without one, or skip one that has one, if your own geographic judgment says
+otherwise. Only choose ICAOs that appear in the candidate list -- never
+invent one. If few or none of the candidates are meaningfully scenic, return
+fewer picks than asked rather than padding with weak choices.
+
+Reply with ONLY JSON: {"picks":[{"icao":"KXXX","reason":"one short sentence
+grounded in actual geography, not generic phrases like \\"has scenery\\""}]}`;
+
+function sanitizeRankPicks(parsed, validIcaos) {
+  if (!Array.isArray(parsed.picks)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const p of parsed.picks) {
+    if (!p || typeof p.icao !== "string") continue;
+    const icao = p.icao.toUpperCase();
+    if (!validIcaos.has(icao) || seen.has(icao)) continue;
+    seen.add(icao);
+    out.push({ icao, reason: typeof p.reason === "string" ? p.reason.slice(0, 200) : "" });
+  }
+  return out;
+}
+
+async function handleAiRank(request, env) {
+  if (!env.GROQ_API_KEY) {
+    return corsJson({ error: "AI ranking is not configured" }, 503);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return corsJson({ error: "invalid JSON body" }, 400);
+  }
+  const prompt = (body && body.prompt || "").trim();
+  const candidates = Array.isArray(body && body.candidates) ? body.candidates.slice(0, MAX_RANK_CANDIDATES) : [];
+  const count = Math.min(Math.max(parseInt(body && body.count) || 1, 1), 5);
+  if (!candidates.length) return corsJson({ error: "candidates is required" }, 400);
+  if (prompt.length > MAX_PROMPT_LEN) {
+    return corsJson({ error: `prompt too long (max ${MAX_PROMPT_LEN} chars)` }, 400);
+  }
+
+  if (!(await withinDailyCap(env))) {
+    return corsJson({ error: "AI ranking is temporarily at capacity for today" }, 429);
+  }
+
+  const validIcaos = new Set(candidates.map(c => String(c.icao || "").toUpperCase()));
+  const userContent = JSON.stringify({
+    request: prompt || "something scenic",
+    wantCount: count,
+    candidates: candidates.map(c => ({
+      icao: c.icao, city: c.city, country: c.country,
+      ...(c.curatedTier ? { curatedTier: c.curatedTier } : {})
+    })),
+  });
+
+  try {
+    const parsed = await callGroq(env, RANK_SYSTEM_PROMPT, userContent, 800);
+    return corsJson({ picks: sanitizeRankPicks(parsed, validIcaos) });
+  } catch (e) {
+    return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : "AI request failed" }, 502);
   }
 }
 // ──────────────────────────────────────────────────────────────────────
@@ -189,6 +290,13 @@ var worker_default = {
         return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
       }
       return handleAiParse(request, env);
+    }
+
+    if (pathname === "/ai-rank") {
+      if (request.method !== "POST") {
+        return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+      }
+      return handleAiRank(request, env);
     }
 
     if (pathname === "/meta" || pathname === "/routes") {
