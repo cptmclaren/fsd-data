@@ -2126,12 +2126,38 @@ function buildChain(startIcao, understood, legs) {
 // it's the interesting part of the suggestion. Origin is just a bare ICAO
 // chip ("from KDFW") since the visitor already knows where they're
 // departing from; repeating its full name on every card/leg was clutter.
-// Airhex's free logo API is keyed directly by airline ICAO/IATA code --
-// no local logo-code mapping table needed, works for any airline the
-// prompt names. Hidden on 404 (not every airline has a logo there) rather
-// than showing a broken-image icon.
+// Airhex (tried first) needs a paid API key -- it returns HTTP 401 but
+// still serves a valid-looking placeholder PNG on failure, so onerror never
+// fires and a generic watermark renders as if it were a real logo. Google
+// Flights' own logo CDN has no such trap: free, unauthenticated, and it's
+// real tail-fin artwork (verified by eye: American/Delta/BA all render their
+// actual tail marks), not a generic icon. It's keyed by 2-letter IATA, not
+// the 3-letter ICAO the route data uses, so a static map is needed -- best
+// effort, not exhaustive (the route DB spans airlines back to the 1950s);
+// anything not in here just shows no logo rather than a wrong one.
+const ICAO_TO_IATA = {
+  AAL:'AA', DAL:'DL', UAL:'UA', SWA:'WN', ASA:'AS', FFT:'F9', NKS:'NK', JBU:'B6',
+  HAL:'HA', AAY:'G4', SCX:'SY', RPA:'YX', SKW:'OO', ENY:'MQ', EDV:'9E',
+  PAA:'PA', TWA:'TW', EAL:'EA', NWA:'NW', COA:'CO', USA:'US', AWE:'HP',
+  ACA:'AC', WJA:'WS', TSC:'TS', ROU:'RV',
+  AJM:'JM', AVA:'AV', CMP:'CM', LAN:'LA', LNE:'LA', TAM:'JJ', ARG:'AR',
+  AMX:'AM', VOI:'Y4', VOZ:'VA', AVI:'AI', GLO:'G3', AZU:'AD', ONE:'6O',
+  BAW:'BA', AFR:'AF', DLH:'LH', KLM:'KL', IBE:'IB', VIR:'VS', EZY:'U2',
+  RYR:'FR', EIN:'EI', SAS:'SK', THY:'TK', AZA:'AZ', ITY:'AZ', SWR:'LX',
+  AUA:'OS', FIN:'AY', LOT:'LO', TAP:'TP', IBS:'I2', VLG:'VY', WZZ:'W6',
+  UAE:'EK', QTR:'QR', ETD:'EY', SVA:'SV', MSR:'MS', GFA:'GF', KAC:'KU',
+  JAL:'JL', ANA:'NH', CPA:'CX', SIA:'SQ', THA:'TG', KAL:'KE', AAR:'OZ',
+  CAL:'CI', EVA:'BR', GIA:'GA', MAS:'MH', PAL:'PR', VJC:'VJ', AIC:'AI',
+  IGO:'6E', CSN:'CZ', CCA:'CA', CES:'MU', HDA:'HX', JJP:'GK', APJ:'MM',
+  QFA:'QF', ANZ:'NZ', JST:'JQ',
+  SAA:'SA', ETH:'ET', KQA:'KQ', RAM:'AT', MSR2:'MS',
+  FDX:'FX', UPS:'5X',
+};
+
 function sgAirlineLogo(icao) {
-  return `<img class="sg-airline-logo" src="https://content.airhex.com/content/logos/airlines_${icao}_100_100_s.png" alt="" onerror="this.style.display='none'">`;
+  const iata = ICAO_TO_IATA[icao];
+  if (!iata) return '';
+  return `<img class="sg-airline-logo" src="https://www.gstatic.com/flights/airline_logos/70px/${iata}.png" alt="" onerror="this.style.display='none'">`;
 }
 
 function sgDestBlock(f) {
