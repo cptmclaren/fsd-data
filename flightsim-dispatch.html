@@ -127,6 +127,9 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .sg-leg-num { font-family:var(--mono); font-size:9px; color:var(--accent); font-weight:700; letter-spacing:.04em; display:block; margin-bottom:4px; }
 .sg-dest-head { display:flex; align-items:center; gap:8px; }
 .sg-airline-logo { width:26px; height:26px; border-radius:5px; object-fit:contain; background:var(--bg4); flex-shrink:0; }
+.td-airline { display:flex; align-items:center; gap:5px; }
+.td-airline-logo { width:18px; height:18px; border-radius:3px; object-fit:contain; background:var(--bg4); flex-shrink:0; }
+.td-airline-text { min-width:0; overflow:hidden; }
 .sg-dest-titles { flex:1; min-width:0; }
 .sg-dest-city-row { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
 .sg-dest-city { font-family:var(--sans); font-weight:700; font-size:16px; color:var(--text); }
@@ -1664,7 +1667,7 @@ function rowHTML(f) {
   const depTimeStr = f.depTime ? f.depTime.slice(0,2)+':'+f.depTime.slice(2) : '';
   const arrTimeStr = f.arrTime ? f.arrTime.slice(0,2)+':'+f.arrTime.slice(2) : '';
   return `<div class="tr${isActive?' active':''}" style="position:absolute;left:0;right:0;height:${ROW_H}px;">
-    <div class="td td-mono">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div>
+    <div class="td td-mono td-airline">${tblAirlineLogo(f.airline)}<div class="td-airline-text">${f.airline}<div class="td-sub" style="color:var(--accent);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${fnNums}">${fnNums || (AL_MAP[f.airline]||'').substring(0,20)}</div></div></div>
     <div class="td td-mono"><span class="${depScenery?'icao-scenery':''}">${f.dep}</span><div class="td-sub">${depCity}</div></div>
     <div class="td td-mono"><span class="${arrScenery?'icao-scenery':''}">${f.arr}</span><div class="td-sub">${arrCity}</div></div>
     <div class="td">${f.acLabel.substring(0,22)} ${cargoBadge}<div class="td-sub td-mono">${f.ac}</div></div>
@@ -2136,6 +2139,15 @@ function fmtUtcLocal(date) {
 // same-day-only time-of-day comparison, so it's correct even across a
 // multi-leg trip that crosses midnight UTC. Falls back to daylight-quality
 // scoring when no deadline was given.
+// `targetUtc` is documented everywhere else in this file (and to the AI,
+// which calls it "deadline") as a deadline, not a symmetric target -- but
+// scoring it as `-abs(diff)` treats arriving 5min early and 5min late as
+// equally good, so "trip ending before 1am" could (and did, per a live
+// report: AI-parsed deadline 01:00, actual arrival 01:05) come back
+// arriving AFTER the stated time. On-time-or-early must always outrank
+// late: bucket late arrivals into their own, much worse score range
+// (still ordered least-late-first within it) so a late candidate can only
+// ever win when literally nothing makes the deadline.
 function pickBestRoute(candidates, nowUtc, targetUtc, departInMin) {
   if (departInMin == null) departInMin = 45;
   let best = null, bestScore = -Infinity;
@@ -2144,7 +2156,8 @@ function pickBestRoute(candidates, nowUtc, targetUtc, departInMin) {
     const arrivalUtc = new Date(nowUtc.getTime() + (departInMin + f.dur) * 60000);
     let score = 0;
     if (targetUtc) {
-      score = -Math.abs(arrivalUtc.getTime() - targetUtc.getTime()) / 60000;
+      const diffMin = (arrivalUtc.getTime() - targetUtc.getTime()) / 60000;
+      score = diffMin <= 0 ? diffMin : -1e6 - diffMin;
     } else if (geo) {
       score = daylightScore(arrivalUtc, geo[0], geo[1]);
     }
@@ -2412,6 +2425,16 @@ function sgAirlineLogo(icao) {
   const iata = ICAO_TO_IATA[icao];
   if (!iata) return '';
   return `<img class="sg-airline-logo" src="https://www.gstatic.com/flights/airline_logos/70px/${iata}.png" alt="" onerror="this.style.display='none'">`;
+}
+
+// Smaller variant for the dense main results table/mobile cards -- same
+// source/mapping as sgAirlineLogo, just sized to fit a 44px row instead
+// of a suggestion card. Browsers cache by URL, so scrolling past many
+// rows of the same airline costs one request, not one per row.
+function tblAirlineLogo(icao) {
+  const iata = ICAO_TO_IATA[icao];
+  if (!iata) return '';
+  return `<img class="td-airline-logo" src="https://www.gstatic.com/flights/airline_logos/70px/${iata}.png" alt="" onerror="this.style.display='none'">`;
 }
 
 function sgDestBlock(f) {
