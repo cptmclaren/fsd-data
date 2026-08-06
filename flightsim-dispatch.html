@@ -2237,18 +2237,34 @@ async function buildChain(prompt, startIcao, understood, legs) {
     }
 
     // Final leg: let the AI reason about which reachable destination is
-    // actually scenic, then pick the best-timed route to it.
+    // actually scenic, then pick the best-timed route to it. Asks for
+    // several ranked candidates, not just the top one -- the AI's scenic
+    // judgment and the daylight/golden-hour timing preference were
+    // previously totally decoupled: pickBestRoute only ever optimized
+    // *which route to the AI's single already-fixed pick*, so a scenic
+    // destination whose entire schedule happens to land at night won
+    // by default even when a daylight-capable alternative existed a
+    // rank or two down. Walk the ranked list and stop at the first one
+    // that actually clears daylight (score >= 1); if none do, fall back
+    // to whichever candidate scored best rather than failing outright.
     const { byDest, list } = destCandidatesFor(current, understood, used);
     if (!list.length) return null;
-    const picks = await callAiRank(prompt, list, 1);
+    const picks = await callAiRank(prompt, list, 5);
     if (!picks.length) return null;
-    const routes = byDest.get(picks[0].icao);
-    const picked = pickBestRoute(routes, nowUtc, targetUtc, departInMin);
+    let picked = null, pickedReason = '';
+    for (const pick of picks) {
+      const routes = byDest.get(pick.icao);
+      if (!routes) continue;
+      const candidate = pickBestRoute(routes, nowUtc, targetUtc, departInMin);
+      if (!candidate) continue;
+      if (!picked || candidate.score > picked.score) { picked = candidate; pickedReason = pick.reason; }
+      if (!targetUtc && candidate.score >= 1) break; // daylight/golden hour reached -- good enough, stop here
+    }
     if (!picked) return null;
     itinerary.push({
       leg: i + 1, f: picked.f, tier: picked.tier,
       depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: picked.arrivalUtc,
-      reason: picks[0].reason || 'scenic destination',
+      reason: pickedReason || 'scenic destination',
     });
   }
   return itinerary;
@@ -2401,12 +2417,20 @@ function sgTimesRow(depIcao, depDate, arrDate) {
     </div>`;
 }
 
+// `reason` is AI-generated text (the model's own words, steered by
+// whatever the visitor typed) -- escape it before it goes into innerHTML.
+// Nothing else on the card is attacker-influenced (airport/airline data
+// is static), so this is the one string here that actually needs it.
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
 function renderSingleSuggestion(picked) {
   return `
     <div class="sg-card">
       ${sgDestBlock(picked.f)}
       <div class="sg-sub">${AL_MAP[picked.f.airline]||picked.f.airline} · ${picked.f.acLabel||picked.f.ac} · ${formatDur(picked.f.dur)}</div>
-      ${picked.reason ? `<div class="sg-reason">${picked.reason}</div>` : ''}
+      ${picked.reason ? `<div class="sg-reason">${escapeHtml(picked.reason)}</div>` : ''}
       ${sgTimesRow(picked.f.dep, picked.depUtc, picked.arrivalUtc || picked.arrUtc)}
     </div>`;
 }
@@ -2452,7 +2476,7 @@ function renderChain(chain) {
     // for a round trip the scenic reason is on the OUTBOUND leg, which is
     // a through-node, not the final one.
     const reasonHtml = (leg.reason && leg.reason !== 'connection')
-      ? `<div class="trip-node-reason">${leg.reason}</div>` : '';
+      ? `<div class="trip-node-reason">${escapeHtml(leg.reason)}</div>` : '';
 
     if (isFinal) {
       const t = fmtUtcLocal(leg.arrUtc);
@@ -2496,6 +2520,17 @@ function renderChain(chain) {
 
 async function suggestFromPrompt() {
   const btn = document.getElementById('suggest-btn');
+  // Reentrancy guard. The Enter-key handler below calls this function
+  // directly and isn't blocked by the button's own disabled state, so
+  // pressing Enter again (or key-repeat) before a request finishes used
+  // to start a second, overlapping call. The two calls then raced for
+  // the shared #suggest-legs value below (whichever one's AI-parse
+  // resolved second would read it after the first had already reset it
+  // to ''), silently downgrading a multi-leg request to a single
+  // destination. This guard, combined with reading+resetting the
+  // selector synchronously (no await in between) rather than after the
+  // AI round-trip, removes the race outright.
+  if (btn.disabled) return;
   const status = document.getElementById('suggest-status');
   const results = document.getElementById('suggest-results');
   const prompt = document.getElementById('suggest-input').value.trim();
@@ -2507,23 +2542,23 @@ async function suggestFromPrompt() {
   status.classList.remove('error');
   results.innerHTML = '';
 
+  // The "N-leg trip" selector is an explicit override -- if set, it wins
+  // regardless of whether the prompt itself mentioned a trip, so multi-leg
+  // planning doesn't depend on phrasing it just right in English. Read and
+  // reset it right here, synchronously, before anything async happens --
+  // it must not still be sitting there (or already cleared by a prior
+  // in-flight call) by the time a later `await` resumes.
+  const legsSelEl = document.getElementById('suggest-legs');
+  const legsSel = legsSelEl.value;
+  legsSelEl.value = '';
+
   try {
     const [understood] = await Promise.all([callAiParse(prompt), loadHandcraftedScenery()]);
     const dep = understood.dep || (document.getElementById('dep').value.trim().toUpperCase().split(',')[0] || '');
     if (!dep) throw new Error('Name a departure airport (e.g. "flying from KDFW…")');
     if (!IDX_DEP.has(dep)) throw new Error(`No routes found departing ${dep}`);
 
-    // The "N-leg trip" selector is an explicit override -- if set, it wins
-    // regardless of whether the prompt itself mentioned a trip, so multi-leg
-    // planning doesn't depend on phrasing it just right in English. Reset
-    // right after reading it so it can't silently apply to a LATER,
-    // unrelated prompt -- that's exactly what happened once already (a
-    // "3-leg trip" left selected from earlier testing hijacked a completely
-    // different round-trip request with no visual reminder it was still set).
-    const legsSelEl = document.getElementById('suggest-legs');
-    const legsSel = legsSelEl.value;
     if (legsSel) { understood.multileg = true; understood.legs = parseInt(legsSel); }
-    legsSelEl.value = '';
 
     // This tool has no login/flight history for anyone -- say so plainly
     // rather than silently ignoring "places I've never been" style requests.
@@ -2545,23 +2580,43 @@ async function suggestFromPrompt() {
     } else {
       const nowUtc = new Date();
       const targetUtc = resolveTargetUtc(understood);
-      const count = understood.mode === 'list' ? 5 : 1;
+      const isList = understood.mode === 'list';
+      // Always rank several candidates, even for a single-pick request --
+      // same fix as buildChain's final leg: the AI's top scenic pick can
+      // have a schedule that only lands at night, and without alternatives
+      // to fall back to there was nothing left to prefer daylight with.
       const { byDest, list } = destCandidatesFor(dep, understood, new Set([dep]));
       if (!list.length) throw new Error(`No matching routes departing ${dep}`);
 
       status.textContent = historyNote + 'Reasoning about scenic destinations…';
-      const picks = await callAiRank(prompt, list, count);
+      const picks = await callAiRank(prompt, list, 5);
       if (!picks.length) throw new Error('No scenic destinations matched — try relaxing the request');
 
-      const rendered = picks.map(p => {
-        const routes = byDest.get(p.icao);
-        if (!routes) return null;
-        const picked = pickBestRoute(routes, nowUtc, targetUtc, understood.departInMin);
-        if (!picked) return null;
-        picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin * 60000);
-        picked.reason = p.reason;
-        return picked;
-      }).filter(Boolean);
+      let rendered;
+      if (isList) {
+        rendered = picks.slice(0, 5).map(p => {
+          const routes = byDest.get(p.icao);
+          if (!routes) return null;
+          const picked = pickBestRoute(routes, nowUtc, targetUtc, understood.departInMin);
+          if (!picked) return null;
+          picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin * 60000);
+          picked.reason = p.reason;
+          return picked;
+        }).filter(Boolean);
+      } else {
+        let best = null;
+        for (const p of picks) {
+          const routes = byDest.get(p.icao);
+          if (!routes) continue;
+          const picked = pickBestRoute(routes, nowUtc, targetUtc, understood.departInMin);
+          if (!picked) continue;
+          picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin * 60000);
+          picked.reason = p.reason;
+          if (!best || picked.score > best.score) best = picked;
+          if (!targetUtc && picked.score >= 1) break; // daylight/golden hour reached -- good enough, stop here
+        }
+        rendered = best ? [best] : [];
+      }
       if (!rendered.length) throw new Error('No scenic destinations matched — try relaxing the request');
       results.innerHTML = rendered.map(renderSingleSuggestion).join('');
     }
