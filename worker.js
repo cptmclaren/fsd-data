@@ -107,6 +107,15 @@ Keys you may set:
     setting arriveLocal/dep distract you from also checking this.
   departInMin: integer minutes from now until wheels-up, only if a specific
     lead time is stated ("in an hour" -> 60, "in 30" -> 30).
+  maxTotalMin: integer minutes -- a cap on TOTAL flight/block time for the
+    whole trip (sum of each leg's actual flight time, NOT counting
+    ground/layover time between legs -- that's how pilots mean "block
+    time"), only if they state a duration or time budget for the whole
+    trip ("under 9 hours", "no more than 6 hours of flying", "keep it
+    under a day of flying"). Convert stated hours to minutes ("9 hours" ->
+    540). Do NOT set this from a single clock-time deadline (that's
+    arriveLocal/arriveUtc) or an aircraft-range remark -- only an actual
+    total-duration/budget statement.
   multileg: true if they describe a one-way multi-stop/connecting
     itinerary that does NOT return to the start, else omit. Do not set
     this together with returnToOrigin -- those are different trip shapes.
@@ -212,6 +221,9 @@ function sanitizeParsed(parsed) {
   if (typeof parsed.returnToOrigin === "boolean") out.returnToOrigin = parsed.returnToOrigin;
   if (Number.isInteger(parsed.departInMin) && parsed.departInMin >= 0 && parsed.departInMin <= 1440) {
     out.departInMin = parsed.departInMin;
+  }
+  if (Number.isInteger(parsed.maxTotalMin) && parsed.maxTotalMin >= 30 && parsed.maxTotalMin <= 4320) {
+    out.maxTotalMin = parsed.maxTotalMin;
   }
   if (typeof parsed.multileg === "boolean") out.multileg = parsed.multileg;
   if (Number.isInteger(parsed.legs) && parsed.legs >= 2 && parsed.legs <= 5) out.legs = parsed.legs;

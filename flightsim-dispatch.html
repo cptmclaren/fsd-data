@@ -2198,7 +2198,10 @@ function candidatesFor(depIcao, understood, excludeArr, maxDurMin) {
       if (!match) return false;
     }
     if (understood.airline && f.airline !== understood.airline) return false;
-    if (maxDurMin && f.dur > maxDurMin) return false;
+    // `!= null`, not truthy -- a caller passing an exhausted 0-minute
+    // remaining budget must still filter everything out, not be treated
+    // as "no cap" the way `0 && …` would.
+    if (maxDurMin != null && f.dur > maxDurMin) return false;
     return true;
   });
 }
@@ -2213,14 +2216,25 @@ async function buildChain(prompt, startIcao, understood, legs) {
   let departInMin = understood.departInMin != null ? understood.departInMin : 45;
   let nowUtc = new Date();
   const targetUtc = resolveTargetUtc(understood); // only applied to the final leg, below
+  // Total flight-only (block) time budget across the whole trip, if the
+  // prompt stated one ("under 9 hours") -- counts each leg's actual `dur`,
+  // NOT ground/layover time between legs, matching how "block time" is
+  // actually used. null = no cap. Previously there was no such key at
+  // all anywhere in the pipeline, so a stated duration budget was just
+  // silently dropped -- a 3-leg "under 9 hours" request could (and did)
+  // come back with 10+ hours of actual flying.
+  let remainingMin = understood.maxTotalMin != null ? understood.maxTotalMin : null;
 
   for (let i = 0; i < legs; i++) {
     const isFinal = i === legs - 1;
+    if (remainingMin != null && remainingMin <= 0) return null;
 
     if (!isFinal) {
       // Only intermediate connecting hops get the domestic-range cap --
-      // the final destination (below) is deliberately uncapped.
-      const cands = candidatesFor(current, understood, used, 240);
+      // the final destination (below) is deliberately uncapped -- but
+      // never let that cap exceed whatever's left of the total budget.
+      const hopCap = remainingMin != null ? Math.min(240, remainingMin) : 240;
+      const cands = candidatesFor(current, understood, used, hopCap);
       if (!cands.length) return null;
       const picked = pickBestRoute(cands, nowUtc, null, departInMin);
       if (!picked) return null;
@@ -2229,6 +2243,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
         depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: picked.arrivalUtc,
         reason: 'connection',
       });
+      if (remainingMin != null) remainingMin -= picked.f.dur;
       used.add(picked.f.arr);
       current = picked.f.arr;
       nowUtc = picked.arrivalUtc;
@@ -2247,7 +2262,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
     // rank or two down. Walk the ranked list and stop at the first one
     // that actually clears daylight (score >= 1); if none do, fall back
     // to whichever candidate scored best rather than failing outright.
-    const { byDest, list } = destCandidatesFor(current, understood, used);
+    const { byDest, list } = destCandidatesFor(current, understood, used, remainingMin != null ? remainingMin : undefined);
     if (!list.length) return null;
     const picks = await callAiRank(prompt, list, 5);
     if (!picks.length) return null;
@@ -2281,12 +2296,13 @@ async function buildRoundTrip(prompt, startIcao, understood) {
   const totalLegs = understood.legs || 2;
   const GROUND_MIN = 45;
   const TOLERANCE_MIN = 90; // matches the private tool's established default
+  const maxTotalMin = understood.maxTotalMin != null ? understood.maxTotalMin : null;
 
   if (totalLegs <= 2) {
     // Direct out-and-back -- tries several AI-ranked destinations (not
     // just the top one) since a scenic pick that can't get home in time
     // is a dead end worth recovering from, not a reason to give up outright.
-    const { byDest, list } = destCandidatesFor(startIcao, understood, new Set([startIcao]));
+    const { byDest, list } = destCandidatesFor(startIcao, understood, new Set([startIcao]), maxTotalMin != null ? maxTotalMin : undefined);
     if (!list.length) return null;
     const picks = await callAiRank(prompt, list, 5);
     const departInMin = understood.departInMin != null ? understood.departInMin : 45;
@@ -2302,8 +2318,10 @@ async function buildRoundTrip(prompt, startIcao, understood) {
         : pickBestRoute(outRoutes, outNowUtc, null, departInMin);
       if (!outPicked) continue;
 
-      const returnRoutes = candidatesFor(pick.icao, understood, new Set()).filter(f => f.arr === startIcao);
-      if (!returnRoutes.length) continue; // no direct route home from here -- try the next AI pick
+      const returnCap = maxTotalMin != null ? maxTotalMin - outPicked.f.dur : undefined;
+      if (maxTotalMin != null && returnCap <= 0) continue; // outbound alone already blew the budget
+      const returnRoutes = candidatesFor(pick.icao, understood, new Set(), returnCap).filter(f => f.arr === startIcao);
+      if (!returnRoutes.length) continue; // no direct route home from here (within budget) -- try the next AI pick
 
       const retPicked = pickBestRoute(returnRoutes, outPicked.arrivalUtc, targetUtc, GROUND_MIN);
       if (!retPicked) continue;
@@ -2336,8 +2354,15 @@ async function buildRoundTrip(prompt, startIcao, understood) {
   const chain = await buildChain(prompt, startIcao, understood, outboundLegs);
   if (!chain) return null;
   const lastLeg = chain[chain.length - 1];
+  // buildChain already enforced maxTotalMin across the outbound legs, but
+  // it has no idea a forced return leg follows -- it can spend the whole
+  // budget outbound and leave nothing for the way home, so re-check here
+  // with whatever's actually left.
+  const usedMin = chain.reduce((sum, l) => sum + l.f.dur, 0);
+  const returnCap = maxTotalMin != null ? maxTotalMin - usedMin : undefined;
+  if (maxTotalMin != null && returnCap <= 0) return null;
 
-  const returnRoutes = candidatesFor(lastLeg.f.arr, understood, new Set()).filter(f => f.arr === startIcao);
+  const returnRoutes = candidatesFor(lastLeg.f.arr, understood, new Set(), returnCap).filter(f => f.arr === startIcao);
   if (!returnRoutes.length) return null;
   const retPicked = pickBestRoute(returnRoutes, lastLeg.arrUtc, targetUtc, GROUND_MIN);
   if (!retPicked) return null;
@@ -2585,7 +2610,7 @@ async function suggestFromPrompt() {
       // same fix as buildChain's final leg: the AI's top scenic pick can
       // have a schedule that only lands at night, and without alternatives
       // to fall back to there was nothing left to prefer daylight with.
-      const { byDest, list } = destCandidatesFor(dep, understood, new Set([dep]));
+      const { byDest, list } = destCandidatesFor(dep, understood, new Set([dep]), understood.maxTotalMin != null ? understood.maxTotalMin : undefined);
       if (!list.length) throw new Error(`No matching routes departing ${dep}`);
 
       status.textContent = historyNote + 'Reasoning about scenic destinations…';
