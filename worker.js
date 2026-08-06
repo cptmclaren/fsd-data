@@ -116,6 +116,10 @@ Keys you may set:
     540). Do NOT set this from a single clock-time deadline (that's
     arriveLocal/arriveUtc) or an aircraft-range remark -- only an actual
     total-duration/budget statement.
+  minTotalMin: integer minutes -- a floor on that same TOTAL flight/block
+    time, only if they state one ("at least 3 hours", "minimum 2 hours of
+    flying"). A stated RANGE ("between 3 and 5 hours", "3 to 5 hours of
+    flying") sets BOTH minTotalMin and maxTotalMin from the two ends.
   multileg: true if they describe a one-way multi-stop/connecting
     itinerary that does NOT return to the start, else omit. Do not set
     this together with returnToOrigin -- those are different trip shapes.
@@ -224,6 +228,15 @@ function sanitizeParsed(parsed) {
   }
   if (Number.isInteger(parsed.maxTotalMin) && parsed.maxTotalMin >= 30 && parsed.maxTotalMin <= 4320) {
     out.maxTotalMin = parsed.maxTotalMin;
+  }
+  if (Number.isInteger(parsed.minTotalMin) && parsed.minTotalMin >= 30 && parsed.minTotalMin <= 4320) {
+    out.minTotalMin = parsed.minTotalMin;
+  }
+  // A nonsensical inverted range (min > max) shouldn't silently make
+  // every candidate impossible -- the max cap is the safety constraint
+  // (never exceed a stated budget), so keep it and drop the floor.
+  if (out.minTotalMin != null && out.maxTotalMin != null && out.minTotalMin > out.maxTotalMin) {
+    delete out.minTotalMin;
   }
   if (typeof parsed.multileg === "boolean") out.multileg = parsed.multileg;
   if (Number.isInteger(parsed.legs) && parsed.legs >= 2 && parsed.legs <= 5) out.legs = parsed.legs;
