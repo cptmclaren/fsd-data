@@ -1,0 +1,43 @@
+name: Deploy static content to Pages
+
+# GitHub's legacy Jekyll-based Pages builder (source: branch "main", path
+# "/") started failing deterministically on 2026-08-06 -- even a rebuild
+# of a commit that had built successfully two days earlier failed with
+# the same generic "Page build failed." error, and adding .nojekyll (to
+# skip Jekyll processing entirely) made no difference. That points at the
+# legacy build pipeline itself, not repo content. Actions-based deployment
+# is a fully separate pipeline (no Jekyll involved at all) and is GitHub's
+# current recommended approach anyway.
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
