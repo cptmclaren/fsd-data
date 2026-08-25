@@ -3947,6 +3947,16 @@ function init() {
     // single scroll snaps the view in. We disable it and drive zoom ourselves
     // (see onWheel/animate) so it always eases smoothly toward a target.
     controls.enableZoom = false;
+    // Built-in rotate maps a pixel delta to a FIXED angle regardless of zoom
+    // level -- at any given distance the same drag either spins the globe
+    // way too fast (zoomed in) or barely turns it (zoomed out), and it
+    // never tracks the literal point under the cursor the way Google
+    // Earth's "grab the globe" drag does. Disabled in favor of a real
+    // arcball drag (see onPointerDown/onPointerMove/dragRayGrabPoint)
+    // that rotates the camera by exactly the amount needed to keep the
+    // grabbed surface point under the cursor at any zoom level, plus its
+    // own flick-to-spin momentum on release.
+    controls.enableRotate = false;
     targetDistance = camera.position.length();
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -4018,7 +4028,109 @@ function onResize() {
   resizeDrawCanvas();
 }
 
+// ── ARCBALL DRAG ROTATION ──
+// Google Earth's "grab the globe" drag keeps the exact point you clicked
+// under the cursor throughout the drag, at any zoom level. A generic
+// orbit control instead maps pixel-delta to a FIXED angle regardless of
+// distance, which is what read as "sloppy" -- so this replaces it.
+//
+// Builds a camera ray analytically from a given (hypothetical) camera
+// position/up rather than mutating the live THREE.Camera -- lets us ask
+// "what's under the cursor" against the camera state AT DRAG START even
+// while the live camera has already moved partway through the drag, which
+// is what keeps the grabbed point exactly pinned under the cursor with no
+// per-frame compounding error (recomputed fresh from drag-start every move,
+// not incrementally).
+function rayFromCameraState(camPos, camUp, ndcX, ndcY, fovDeg, aspect) {
+  const forward = camPos.clone().negate().normalize(); // camera always looks at the origin
+  const right = new THREE.Vector3().crossVectors(forward, camUp).normalize();
+  const realUp = new THREE.Vector3().crossVectors(right, forward).normalize();
+  const halfH = Math.tan(fovDeg * Math.PI / 180 / 2);
+  const halfW = halfH * aspect;
+  const dir = forward.clone()
+    .addScaledVector(right, ndcX * halfW)
+    .addScaledVector(realUp, ndcY * halfH)
+    .normalize();
+  return { origin: camPos.clone(), dir };
+}
+// Where a ray hits the globe -- if it misses (dragging past the visible
+// silhouette), falls back to the nearest point on the sphere to that ray
+// instead of leaving the drag undefined, so rotation stays smooth right up
+// to and past the edge (the same trick real arcball/trackball tools use).
+function raySphereGrabPoint(origin, dir, radius) {
+  const b = origin.dot(dir);
+  const c = origin.dot(origin) - radius * radius;
+  const disc = b * b - c;
+  if (disc >= 0) {
+    const t = -b - Math.sqrt(disc);
+    if (t > 0) return origin.clone().addScaledVector(dir, t);
+  }
+  const closest = origin.clone().addScaledVector(dir, Math.max(0, -b));
+  return closest.normalize().multiplyScalar(radius);
+}
+function dragRayGrabPoint(camPos, camUp, clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
+  const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
+  const ray = rayFromCameraState(camPos, camUp, ndcX, ndcY, camera.fov, camera.aspect);
+  return raySphereGrabPoint(ray.origin, ray.dir, GLOBE_R);
+}
+// angle = 2*acos(w) (NOT acos(|w|)) is what keeps this branch-free and
+// correct for angle up to 2*PI with no separate sign-of-w correction needed.
+function quatToAxisAngle(q, outAxis) {
+  const w = Math.max(-1, Math.min(1, q.w));
+  const angle = 2 * Math.acos(w);
+  const s = Math.sqrt(Math.max(0, 1 - w * w));
+  if (s < 1e-6) { outAxis.set(1, 0, 0); return 0; }
+  outAxis.set(q.x / s, q.y / s, q.z / s);
+  return angle;
+}
+
+let dragging = false;
+const dragStartCamPos = new THREE.Vector3();
+const dragStartCamUp = new THREE.Vector3();
+let dragStartGrabPoint = null;
+const dragLastQInv = new THREE.Quaternion();
+let dragLastMoveTime = 0;
+const spinAxis = new THREE.Vector3(0, 1, 0);
+let spinSpeed = 0; // rad/s, decays after release -- flick-to-spin momentum
+const SPIN_DAMPING = 3.2;    // higher = the flick coasts to a stop sooner
+const SPIN_MIN_SPEED = 0.0006;
+
+function startDrag(clientX, clientY) {
+  dragging = true;
+  spinSpeed = 0; // grabbing the globe stops any residual spin
+  zoomFocusPoint = null; // ...and any in-progress zoom-toward-cursor recenter
+  dragStartCamPos.copy(camera.position);
+  dragStartCamUp.copy(camera.up);
+  dragStartGrabPoint = dragRayGrabPoint(dragStartCamPos, dragStartCamUp, clientX, clientY);
+  dragLastQInv.identity();
+  dragLastMoveTime = performance.now();
+}
+
 function onPointerMove(e) {
+  if (dragging && dragStartGrabPoint && !activePinch) {
+    const curPoint = dragRayGrabPoint(dragStartCamPos, dragStartCamUp, e.clientX, e.clientY);
+    const q = new THREE.Quaternion().setFromUnitVectors(
+      dragStartGrabPoint.clone().normalize(), curPoint.clone().normalize()
+    );
+    const qInv = q.invert();
+    camera.position.copy(dragStartCamPos).applyQuaternion(qInv);
+    camera.up.copy(dragStartCamUp).applyQuaternion(qInv);
+
+    // Track angular velocity (this move's incremental rotation over elapsed
+    // time) for release-inertia.
+    const now = performance.now();
+    const dt = (now - dragLastMoveTime) / 1000;
+    if (dt > 0.001) {
+      const qIncremental = qInv.clone().multiply(dragLastQInv.clone().invert());
+      const angle = quatToAxisAngle(qIncremental, spinAxis);
+      spinSpeed = angle > 1e-5 ? angle / dt : 0;
+    }
+    dragLastQInv.copy(qInv);
+    dragLastMoveTime = now;
+  }
+
   // Touch has no real "hover" — pointermove there just means a finger is
   // dragging the globe, and re-picking a line under it every frame is both
   // meaningless and a distracting flicker. Only mouse gets the affordance.
@@ -4046,10 +4158,16 @@ const ZOOM_MAX_VELOCITY = 2.2;
 const ZOOM_IMPULSE = 0.11;
 const ZOOM_DAMPING = 5; // higher = velocity decays to a stop sooner after the wheel goes quiet
 
+// Zooming in homes in on the point under the cursor (Google Maps/Earth
+// style) instead of always zooming toward dead-center -- see the recenter
+// step in animate(). Only set on zoom-IN: zooming out has no single point
+// to converge on and should just pull back from the current view.
+let zoomFocusPoint = null;
 function onWheel(e) {
   e.preventDefault();
   const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 100) / 100;
   zoomVelocity = Math.max(-ZOOM_MAX_VELOCITY, Math.min(ZOOM_MAX_VELOCITY, zoomVelocity + delta * ZOOM_IMPULSE));
+  zoomFocusPoint = delta < 0 ? dragRayGrabPoint(camera.position, camera.up, e.clientX, e.clientY) : null;
 }
 
 // Two-finger pinch zoom. OrbitControls' own touch dolly is tied to the same
@@ -4063,6 +4181,7 @@ function onTouchStart(e) {
   if (e.touches.length === 2) {
     activePinch = true;
     zoomVelocity = 0;
+    dragging = false; // a 2nd finger means pinch, not grab-drag -- stop rotating until fingers are released
     pinchStartDist = touchDist(e.touches);
     pinchStartDistance = targetDistance;
   }
@@ -4082,8 +4201,17 @@ function onPointerDown(e) {
   // the eventual pointerup doesn't get misread as a tap-to-select.
   if (e.pointerType === 'touch' && e.isPrimary === false) { pointerDownPos = null; return; }
   pointerDownPos = { x: e.clientX, y: e.clientY, touch: e.pointerType === 'touch' };
+  // Draw mode's own overlay canvas captures pointer events instead (see
+  // initDrawCanvas) -- this only fires for it if that overlay is somehow
+  // bypassed, so guard here too rather than starting a drag underneath it.
+  if (currentTool !== 'draw') {
+    startDrag(e.clientX, e.clientY);
+    try { renderer.domElement.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
+  }
 }
 function onPointerUp(e) {
+  dragging = false;
+  dragStartGrabPoint = null;
   if (!pointerDownPos) return;
   const dx = e.clientX - pointerDownPos.x, dy = e.clientY - pointerDownPos.y;
   const wasTouch = pointerDownPos.touch;
@@ -4250,6 +4378,45 @@ function animate() {
     targetDistance = Math.min(MAX_DIST, Math.max(MIN_DIST, targetDistance * Math.exp(zoomVelocity * dt)));
     zoomVelocity *= Math.exp(-ZOOM_DAMPING * dt);
     if (Math.abs(zoomVelocity) < 0.001) zoomVelocity = 0;
+  }
+
+  // Flick-to-spin momentum: keep rotating at a decaying angular speed after
+  // the pointer is released (same decay shape as zoomVelocity above).
+  if (!dragging && spinSpeed > SPIN_MIN_SPEED) {
+    const q = new THREE.Quaternion().setFromAxisAngle(spinAxis, spinSpeed * dt);
+    camera.position.applyQuaternion(q);
+    camera.up.applyQuaternion(q);
+    spinSpeed *= Math.exp(-SPIN_DAMPING * dt);
+    if (spinSpeed < SPIN_MIN_SPEED) spinSpeed = 0;
+  }
+
+  // Zooming in eases the view toward centering whatever was under the
+  // cursor when the wheel/pinch gesture started (Google Maps/Earth style)
+  // instead of always converging on the globe's center regardless of where
+  // you're actually looking.
+  if (!dragging && zoomFocusPoint && zoomVelocity < -0.0001) {
+    const camDirNorm = camera.position.clone().normalize();
+    const focusDirNorm = zoomFocusPoint.clone().normalize();
+    const angle = camDirNorm.angleTo(focusDirNorm);
+    if (angle > 1e-4) {
+      // Recenter progress is tied to the SAME per-frame fraction driving
+      // the distance zoom above (targetDistance *= exp(zoomVelocity*dt),
+      // i.e. that fraction of the remaining distance closes each frame) --
+      // not an independent time-based ease. A fixed time constant here
+      // raced ahead to full convergence within a few hundred ms regardless
+      // of how much zooming had actually happened, so even one wheel tick
+      // (or a fresh, moving target re-picked every tick during a fast
+      // multi-tick scroll) snapped or compounded into 40-160 degrees of
+      // rotation. Coupling it to the actual zoom-in fraction means the
+      // cursor point only drifts toward center in proportion to how much
+      // you've actually zoomed in, and can't run away regardless of how
+      // often zoomFocusPoint gets refreshed mid-gesture.
+      const frac = Math.min(1, Math.max(0, 1 - Math.exp(zoomVelocity * dt)));
+      const qFull = new THREE.Quaternion().setFromUnitVectors(camDirNorm, focusDirNorm);
+      const qPartial = new THREE.Quaternion().identity().slerp(qFull, frac);
+      camera.position.applyQuaternion(qPartial);
+      camera.up.applyQuaternion(qPartial);
+    }
   }
 
   // Ease the camera toward targetDistance instead of jumping — OrbitControls
