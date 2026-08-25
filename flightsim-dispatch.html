@@ -3393,14 +3393,18 @@ const STATES_URL = './world-states.topojson';
 
 let regionGroup, borderGroup;
 let regions = [];              // [{id, name, polygons, bbox, label:[lon,lat], selectable}]
+let regionById = new Map();    // region id -> region (all regions, selectable or not)
+let selectableRegionsSorted = []; // selectable regions, smallest-bbox-area first
 let icaoRegion = new Map();    // ICAO -> region id (selectable regions only)
-let regionMeshes = new Map();  // region id -> THREE.Mesh
+let regionMeshes = new Map();  // region id -> THREE.Mesh, built lazily (see getOrBuildRegionMesh) -- only
+                                // for regions actually hovered/selected, never all ~4,600 of them at once
 let regionDataPromise = null;
 let selectedRegionIds = new Set();
 let labelSprites = [];
 let bordersVisible = true;
 let currentTool = 'none';      // 'none' | 'select' | 'draw'
-let hoveredRegionMesh = null;
+let hoveredRegionId = null;
+let earthMesh = null;          // referenced by pickRegionAt to unproject a click into lat/lon
 let drawCanvasEl, drawCtx, drawing = false, drawPath = [];
 
 function latLonToVec3(lat, lon, radius) {
@@ -3412,16 +3416,35 @@ function latLonToVec3(lat, lon, radius) {
     radius * Math.sin(phi) * Math.sin(theta)
   );
 }
+// Inverse of latLonToVec3 -- used to turn a raycast hit on the earth sphere
+// back into a lat/lon for point-in-polygon region lookup (see pickRegionAt).
+function vec3ToLatLon(v) {
+  const r = v.length();
+  const phi = Math.acos(Math.max(-1, Math.min(1, v.y / r)));
+  const theta = Math.atan2(-v.z, v.x);
+  let lon = theta * 180 / Math.PI;
+  if (lon <= -180) lon += 360;
+  if (lon > 180) lon -= 360;
+  return [90 - phi * 180 / Math.PI, lon];
+}
 
 // ── STATE / COUNTRY BORDERS + AREA SELECTION ──
-// Two GeoJSON datasets, fetched once per session: world country outlines
-// (~180 countries) and Natural Earth's 50m admin-1 file, which only carries
-// state/province detail for BIG_COUNTRIES -- Natural Earth itself omits
-// finer subdivisions elsewhere at this scale. So the "Select" click-tool
-// resolves to state granularity inside those countries and country
-// granularity everywhere else; borders for all of them are still drawn.
+// Two datasets, fetched once per session: world country outlines (~180
+// countries, GeoJSON) and a bundled, simplified copy of Natural Earth's
+// global admin-1 (state/province) boundaries (~4,600 regions, TopoJSON --
+// see world-states.topojson). Country-level selection is only a fallback
+// for the handful of countries that dataset has no subdivisions for at all.
 // The freehand "Draw area" tool needs none of this data -- it tests airport
 // screen positions directly against the drawn shape, so it covers anywhere.
+//
+// With ~4,600 regions, giving every one its own always-in-the-scene mesh
+// (as an earlier version did) meant thousands of draw calls every frame
+// just sitting there at opacity 0 -- a real framerate killer. Region fill
+// meshes are now built lazily, only for whatever's actually hovered or
+// selected (see getOrBuildRegionMesh), and "what region did I click"
+// itself is answered with a single raycast against the one opaque earth
+// sphere plus a CPU-side point-in-polygon lookup (see pickRegionAt) rather
+// than raycasting against thousands of individual region meshes.
 
 function ringToVec3s(ring, radius) {
   return ring.map(([lon, lat]) => latLonToVec3(lat, lon, radius));
@@ -3459,6 +3482,36 @@ function polygonsFromGeometry(geom) {
   return [];
 }
 
+// Signed shoelace area -- also doubles as the area-weight in ringCentroid below.
+function ringArea(ring) {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return a / 2;
+}
+// Proper area-weighted polygon centroid (not a plain vertex average, which
+// skews hard toward whichever stretch of the boundary happens to have the
+// most sampled points -- for a country that's usually its most intricate
+// coastline, e.g. the US label was landing near the Gulf coast instead of
+// the middle of the country).
+function ringCentroid(ring) {
+  let cx = 0, cy = 0, a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const cross = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    a += cross;
+    cx += (ring[j][0] + ring[i][0]) * cross;
+    cy += (ring[j][1] + ring[i][1]) * cross;
+  }
+  a *= 0.5;
+  if (Math.abs(a) < 1e-9) {
+    let sx = 0, sy = 0;
+    for (const [x, y] of ring) { sx += x; sy += y; }
+    return [sx / ring.length, sy / ring.length];
+  }
+  return [cx / (6 * a), cy / (6 * a)];
+}
+
 function buildRegion(id, name, selectable, geom, labelLonLat) {
   const polygons = polygonsFromGeometry(geom);
   if (!polygons.length) return null;
@@ -3469,11 +3522,14 @@ function buildRegion(id, name, selectable, geom, labelLonLat) {
   }
   let label = labelLonLat;
   if (!label) {
-    let biggest = polygons[0][0];
-    for (const poly of polygons) if (poly[0].length > biggest.length) biggest = poly[0];
-    let sx = 0, sy = 0;
-    for (const [x, y] of biggest) { sx += x; sy += y; }
-    label = [sx / biggest.length, sy / biggest.length];
+    // Label on the largest-by-AREA part (e.g. the US mainland, not Alaska
+    // or some island group that happens to have more boundary vertices).
+    let biggest = polygons[0][0], biggestArea = Math.abs(ringArea(biggest));
+    for (const poly of polygons) {
+      const a = Math.abs(ringArea(poly[0]));
+      if (a > biggestArea) { biggest = poly[0]; biggestArea = a; }
+    }
+    label = ringCentroid(biggest);
   }
   return { id, name, polygons, bbox, label, selectable };
 }
@@ -3498,6 +3554,31 @@ function buildRegionMesh(region) {
   const mat = new THREE.MeshBasicMaterial({ color: ACCENT_COLOR, transparent: true, opacity: 0, depthWrite: false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.userData = { regionId: region.id };
+  return mesh;
+}
+
+function regionAtLatLon(lat, lon) {
+  for (const rg of selectableRegionsSorted) {
+    const [minLon, minLat, maxLon, maxLat] = rg.bbox;
+    if (lon < minLon || lon > maxLon || lat < minLat || lat > maxLat) continue;
+    const hit = rg.polygons.some(poly =>
+      pointInRing(lon, lat, poly[0]) && !poly.slice(1).some(hole => pointInRing(lon, lat, hole)));
+    if (hit) return rg.id;
+  }
+  return null;
+}
+
+// Region fill meshes exist only for whatever's actually hovered or
+// selected right now (see comment above loadRegionData) -- built once per
+// region id then cached/reused for the rest of the session.
+function getOrBuildRegionMesh(id) {
+  let mesh = regionMeshes.get(id);
+  if (mesh) return mesh;
+  const rg = regionById.get(id);
+  if (!rg) return null;
+  mesh = buildRegionMesh(rg);
+  regionGroup.add(mesh);
+  regionMeshes.set(id, mesh);
   return mesh;
 }
 
@@ -3589,31 +3670,22 @@ async function loadRegionData() {
     }
     regions = built;
     if (!regions.length) return; // both fetches failed -- leave borders/selection empty rather than throw
+    for (const rg of regions) regionById.set(rg.id, rg);
 
     buildBorderLines();
 
-    // Assign each airport to the smallest-area selectable region that
-    // actually contains it (smallest-first so a state wins over its own
-    // country). bbox pre-check keeps this fast across thousands of airports.
-    const selectableRegions = regions.filter(r => r.selectable);
-    selectableRegions.sort((a, b) =>
+    // Smallest-bbox-area first, so a state wins over its own country when
+    // both contain a point -- shared by icaoRegion assignment below and by
+    // click/hover lookup (see regionAtLatLon).
+    selectableRegionsSorted = regions.filter(r => r.selectable);
+    selectableRegionsSorted.sort((a, b) =>
       (a.bbox[2]-a.bbox[0])*(a.bbox[3]-a.bbox[1]) - (b.bbox[2]-b.bbox[0])*(b.bbox[3]-b.bbox[1]));
+
     const geo = window.AIRPORT_GEO || {};
     for (const icao in geo) {
       const [lat, lon] = geo[icao];
-      for (const rg of selectableRegions) {
-        const [minLon, minLat, maxLon, maxLat] = rg.bbox;
-        if (lon < minLon || lon > maxLon || lat < minLat || lat > maxLat) continue;
-        const hit = rg.polygons.some(poly =>
-          pointInRing(lon, lat, poly[0]) && !poly.slice(1).some(hole => pointInRing(lon, lat, hole)));
-        if (hit) { icaoRegion.set(icao, rg.id); break; }
-      }
-    }
-
-    for (const rg of selectableRegions) {
-      const mesh = buildRegionMesh(rg);
-      regionGroup.add(mesh);
-      regionMeshes.set(rg.id, mesh);
+      const rid = regionAtLatLon(lat, lon);
+      if (rid) icaoRegion.set(icao, rid);
     }
 
     for (const rg of regions) {
@@ -3668,7 +3740,10 @@ function spriteScreenWidthPx(sprite, rectH) {
 
 function updateLabelOpacity() {
   if (!labelSprites.length || !renderer) return;
-  if (!bordersVisible) { for (const sprite of labelSprites) sprite.material.opacity = 0; return; }
+  if (!bordersVisible) {
+    for (const sprite of labelSprites) { sprite.material.opacity = 0; sprite.visible = false; }
+    return;
+  }
   const dist = camera.position.length();
   const camDir = camera.position.clone().normalize();
   const rectW = renderer.domElement.clientWidth || 1, rectH = renderer.domElement.clientHeight || 1;
@@ -3676,7 +3751,11 @@ function updateLabelOpacity() {
   // Pass 1: distance-based reveal (see labelRevealDistance) plus a
   // front-face check -- sprites don't self-occlude against the far side of
   // the globe the way real surface geometry does, so a near-horizon label
-  // would otherwise show through edge-on and unreadable.
+  // would otherwise show through edge-on and unreadable. `visible` (not
+  // just opacity 0) is set on anything that doesn't survive this pass, so
+  // the renderer actually skips it -- with ~4,800 labels total, leaving
+  // them all `visible=true` at opacity 0 meant thousands of real draw
+  // calls every frame for labels nobody could see, a major cause of lag.
   const candidates = [];
   for (const sprite of labelSprites) {
     const rd = sprite.userData.revealDist;
@@ -3685,6 +3764,7 @@ function updateLabelOpacity() {
     if (opacity > 0.02 && sprite.position.dot(camDir) < GLOBE_R * 0.15) opacity = 0;
     sprite.material.opacity = opacity;
     if (opacity > 0.05) candidates.push(sprite);
+    else sprite.visible = false;
   }
 
   // Pass 2: greedy on-screen declutter among whatever's currently fading
@@ -3700,8 +3780,8 @@ function updateLabelOpacity() {
     const w = spriteScreenWidthPx(sprite, rectH);
     const h = w * sprite.userData.aspect;
     const clash = placed.some(p => Math.abs(p.x - s.x) < (w + p.w) * 0.42 && Math.abs(p.y - s.y) < (h + p.h) * 0.55);
-    if (clash) sprite.material.opacity = 0;
-    else placed.push({ x: s.x, y: s.y, w, h });
+    if (clash) { sprite.material.opacity = 0; sprite.visible = false; }
+    else { sprite.visible = true; placed.push({ x: s.x, y: s.y, w, h }); }
   }
 }
 
@@ -3888,7 +3968,8 @@ function init() {
     const globeMat = earthTex
       ? new THREE.MeshPhongMaterial({ map: earthTex, specular: 0x111111, shininess: 4 })
       : new THREE.MeshPhongMaterial({ color: 0x1c2b3a, specular: 0x111111, shininess: 4 });
-    scene.add(new THREE.Mesh(globeGeo, globeMat));
+    earthMesh = new THREE.Mesh(globeGeo, globeMat);
+    scene.add(earthMesh);
 
     const glowGeo = new THREE.SphereGeometry(GLOBE_R * 1.015, 48, 48);
     const glowMat = new THREE.MeshBasicMaterial({ color: 0x4a7fb0, transparent: true, opacity: 0.06, side: THREE.BackSide });
@@ -4065,21 +4146,39 @@ function pickLineTouchScreen(clientX, clientY, pixelRadius) {
   return best;
 }
 
+// Raycasts against the single opaque earth sphere (one draw call, always in
+// the scene) rather than per-region meshes, unprojects the hit point back
+// to lat/lon, then answers "which region is that" with the same CPU-side
+// point-in-polygon lookup used to assign airports to regions on load.
 function pickRegionAt(clientX, clientY) {
+  if (!earthMesh) return null;
   const rect = renderer.domElement.getBoundingClientRect();
   const ndc = new THREE.Vector2(((clientX-rect.left)/rect.width)*2-1, -((clientY-rect.top)/rect.height)*2+1);
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects(regionGroup.children, false);
-  return hits.length ? hits[0].object : null;
+  const hits = raycaster.intersectObject(earthMesh, false);
+  if (!hits.length) return null;
+  const [lat, lon] = vec3ToLatLon(hits[0].point);
+  return regionAtLatLon(lat, lon);
+}
+
+function applyRegionMeshState(id, hovered, selected) {
+  if (!hovered && !selected) {
+    // Nothing to show -- if a mesh happens to exist (was hovered/selected
+    // before), zero it out, but don't force-build one just to hide it.
+    const mesh = regionMeshes.get(id);
+    if (mesh) setRegionMeshState(mesh, false, false);
+    return;
+  }
+  const mesh = getOrBuildRegionMesh(id);
+  if (mesh) setRegionMeshState(mesh, hovered, selected);
 }
 
 function handleClick(e, isTouch) {
   if (currentTool === 'select') {
-    const hit = pickRegionAt(e.clientX, e.clientY);
-    if (hit) {
-      const id = hit.userData.regionId;
+    const id = pickRegionAt(e.clientX, e.clientY);
+    if (id) {
       if (selectedRegionIds.has(id)) selectedRegionIds.delete(id); else selectedRegionIds.add(id);
-      setRegionMeshState(hit, hit === hoveredRegionMesh, selectedRegionIds.has(id));
+      applyRegionMeshState(id, id === hoveredRegionId, selectedRegionIds.has(id));
       if (typeof window.onMapRegionToggle === 'function') window.onMapRegionToggle(id);
     }
     return;
@@ -4114,15 +4213,16 @@ function checkHover() {
   pendingHoverCheck = false;
   if (!renderer) return;
   if (currentTool === 'select') {
-    if (!regionGroup.children.length) return;
+    if (!earthMesh) return;
     raycaster.setFromCamera(mouseNDC, camera);
-    const hits = raycaster.intersectObjects(regionGroup.children, false);
-    const hit = hits.length ? hits[0].object : null;
-    if (hit === hoveredRegionMesh) return;
-    if (hoveredRegionMesh) setRegionMeshState(hoveredRegionMesh, false, selectedRegionIds.has(hoveredRegionMesh.userData.regionId));
-    hoveredRegionMesh = hit;
-    renderer.domElement.style.cursor = hit ? 'pointer' : '';
-    if (hit) setRegionMeshState(hit, true, selectedRegionIds.has(hit.userData.regionId));
+    const hits = raycaster.intersectObject(earthMesh, false);
+    const id = hits.length ? regionAtLatLon(...vec3ToLatLon(hits[0].point)) : null;
+    if (id === hoveredRegionId) return;
+    const prev = hoveredRegionId;
+    hoveredRegionId = id;
+    if (prev) applyRegionMeshState(prev, false, selectedRegionIds.has(prev));
+    renderer.domElement.style.cursor = id ? 'pointer' : '';
+    if (id) applyRegionMeshState(id, true, selectedRegionIds.has(id));
     return;
   }
   if (!arcLines.length) return;
@@ -4271,13 +4371,18 @@ function hide() {
 
 function setTool(tool) {
   currentTool = tool;
-  if (hoveredRegionMesh) { setRegionMeshState(hoveredRegionMesh, false, selectedRegionIds.has(hoveredRegionMesh.userData.regionId)); hoveredRegionMesh = null; }
+  if (hoveredRegionId) { applyRegionMeshState(hoveredRegionId, false, selectedRegionIds.has(hoveredRegionId)); hoveredRegionId = null; }
   if (hoveredLine) { setLineHoverAffordance(hoveredLine, false); hoveredLine = null; }
   if (renderer) renderer.domElement.style.cursor = '';
 }
 function setSelectedRegions(set) {
+  const prev = selectedRegionIds;
   selectedRegionIds = new Set(set);
-  for (const [id, mesh] of regionMeshes) setRegionMeshState(mesh, mesh === hoveredRegionMesh, selectedRegionIds.has(id));
+  // Only touch meshes that actually changed selection state -- previously
+  // selected-and-now-not, or newly selected (a mesh gets lazily built here
+  // the first time a region is selected via the status pill/toggle path).
+  for (const id of prev) if (!selectedRegionIds.has(id)) applyRegionMeshState(id, id === hoveredRegionId, false);
+  for (const id of selectedRegionIds) applyRegionMeshState(id, id === hoveredRegionId, true);
 }
 function selectedRegionNames() {
   return regions.filter(r => selectedRegionIds.has(r.id)).map(r => r.name);
