@@ -275,6 +275,18 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .globe-hint .hint-touch { display:inline; }
 }
 .globe-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text3); font-size:12px; flex-direction:column; gap:6px; }
+.globe-toolbar { position:absolute; top:10px; right:12px; display:flex; gap:4px; z-index:2; }
+.globe-tool-btn { font-family:var(--sans); font-size:11px; font-weight:500; color:var(--text2); background:rgba(20,22,26,.72); backdrop-filter:blur(4px); border:1px solid var(--border2); padding:5px 9px; border-radius:var(--r2); cursor:pointer; display:flex; align-items:center; gap:4px; transition:background .1s,color .1s,border-color .1s; }
+.globe-tool-btn:hover { color:#fff; border-color:var(--text3); }
+.globe-tool-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+.globe-tool-btn:disabled { opacity:.4; cursor:not-allowed; }
+.globe-draw-canvas { position:absolute; inset:0; pointer-events:none; touch-action:none; }
+.globe-draw-canvas.active { pointer-events:auto; cursor:crosshair; }
+.globe-region-status { position:absolute; bottom:10px; right:12px; display:flex; align-items:center; gap:8px; background:rgba(20,22,26,.82); backdrop-filter:blur(4px); border:1px solid var(--border2); border-radius:var(--r2); padding:6px 8px; font-size:11px; color:var(--text2); max-width:min(70%, 420px); z-index:2; }
+.globe-region-status select { font-size:10px; padding:2px 4px; }
+.globe-region-status button { font-size:10px; color:var(--accent); background:transparent; border:1px solid var(--border2); border-radius:4px; padding:3px 7px; cursor:pointer; white-space:nowrap; }
+.globe-region-status button:hover { border-color:var(--accent); }
+.globe-region-status-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sort-label { font-size:11px; color:var(--text3); white-space:nowrap; }
 .filter-note { font-size:10px; font-family:var(--mono); color:var(--text3); margin-left:auto; }
 .filter-note span { color:var(--accent); }
@@ -1054,6 +1066,23 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
             <span class="hint-mouse">Drag to rotate · scroll to zoom · click a route</span>
             <span class="hint-touch">Drag to rotate · pinch to zoom · tap a route</span>
           </div>
+          <div class="globe-toolbar" id="globe-toolbar">
+            <button class="globe-tool-btn active" data-tool="none" onclick="setMapTool('none')" title="Rotate &amp; explore"><i class="ti ti-hand-stop" aria-hidden="true"></i></button>
+            <button class="globe-tool-btn" data-tool="select" onclick="setMapTool('select')" title="Click states / countries to filter flights" disabled><i class="ti ti-map-pin" aria-hidden="true"></i> Select</button>
+            <button class="globe-tool-btn" data-tool="draw" onclick="setMapTool('draw')" title="Freehand-draw an area to filter flights"><i class="ti ti-lasso" aria-hidden="true"></i> Draw area</button>
+            <button class="globe-tool-btn active" id="globe-borders-toggle" onclick="toggleMapBorders()" title="Show/hide state &amp; country borders" disabled><i class="ti ti-border-all" aria-hidden="true"></i></button>
+          </div>
+          <canvas class="globe-draw-canvas" id="globe-draw-canvas"></canvas>
+          <div class="globe-region-status" id="globe-region-status" style="display:none;">
+            <span class="globe-region-status-text" id="globe-region-status-text"></span>
+            <select id="globe-area-role" onchange="setMapAreaRole(this.value)" title="Which endpoint must be in the area">
+              <option value="either">Either end</option>
+              <option value="dep">Departure</option>
+              <option value="arr">Arrival</option>
+              <option value="both">Both ends</option>
+            </select>
+            <button onclick="clearMapAreaFilter()">Clear</button>
+          </div>
           <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
         </div>
         <div class="suggest-pane view-pane view-hidden" id="suggest-pane">
@@ -1297,7 +1326,7 @@ function hasActiveFilters(fi) {
   const roleDefault = fi.pax && fi.cargo;
   const noManual = !fi.deps.length && !fi.arrs.length && !fi.airlines.length && !fi.acFamilies.length && sliderDefault && roleDefault && !fi.departsEnable && !fi.sceneryEnable;
   const noQS = !qs.deps.length && !qs.arrs.length && !qs.airlines.length && !qs.acFamilies.length && qs.yearLo === null && qs.durHi === null;
-  return !(noManual && noQS);
+  return !(noManual && noQS) || mapAreaFilterActive();
 }
 
 // Shared aircraft-family matching logic, used by the manual filter, the
@@ -1404,6 +1433,14 @@ function matchesFilters(f, fi) {
     else if (fi.sceneryRole === 'both') { if (!depMatch || !arrMatch) return false; }
     else if (!depMatch && !arrMatch) return false; // either
   }
+  // Map area filter (state/country select or freehand lasso draw)
+  if (mapAreaFilterActive()) {
+    const dm = airportInMapArea(f.dep), am = airportInMapArea(f.arr);
+    if (mapAreaRole === 'dep') { if (!dm) return false; }
+    else if (mapAreaRole === 'arr') { if (!am) return false; }
+    else if (mapAreaRole === 'both') { if (!dm || !am) return false; }
+    else if (!dm && !am) return false; // either
+  }
   return true;
 }
 
@@ -1412,6 +1449,85 @@ function sceneryMatch(icao) {
   const useNative = document.getElementById('scenery-native').checked;
   const useCompat = document.getElementById('scenery-compatible').checked;
   return (useNative && NATIVE_ICAO.has(icao)) || (useCompat && COMPATIBLE_ICAO.has(icao));
+}
+
+// ── MAP AREA FILTER ──
+// Two ways to spatially filter flights from the 3D map: click named
+// states/countries ("select" mode -- membership resolved against
+// window.FSD_Globe's region dataset), or freehand-draw a lasso around any
+// shape on screen ("draw" mode -- resolved directly against airport
+// positions at draw time, so it needs no boundary data and works anywhere
+// on the globe). Both funnel into the same ICAO-membership test below, kept
+// as free-standing state (like `qs`) rather than folded into getFilters()'s
+// `fi` object since it's driven by the globe module, not the filter panel.
+let mapSelectedRegions = new Set();   // region ids toggled on via "select" mode
+let mapDrawnIcaoSet = null;           // Set<ICAO> from the last freehand lasso, or null
+let mapAreaRole = 'either';           // 'either' | 'dep' | 'arr' | 'both'
+
+function mapAreaFilterActive() { return mapSelectedRegions.size > 0 || !!mapDrawnIcaoSet; }
+
+function airportInMapArea(icao) {
+  if (mapDrawnIcaoSet) return mapDrawnIcaoSet.has(icao);
+  if (mapSelectedRegions.size && window.FSD_Globe) {
+    const rid = window.FSD_Globe.regionOf(icao);
+    return rid != null && mapSelectedRegions.has(rid);
+  }
+  return false;
+}
+
+function setMapAreaRole(role) {
+  mapAreaRole = role;
+  renderTable();
+}
+
+function clearMapAreaFilter() {
+  mapSelectedRegions.clear();
+  mapDrawnIcaoSet = null;
+  if (window.FSD_Globe) window.FSD_Globe.setSelectedRegions(mapSelectedRegions);
+  updateMapRegionStatus();
+  renderTable();
+}
+
+function updateMapRegionStatus() {
+  const el = document.getElementById('globe-region-status');
+  const txt = document.getElementById('globe-region-status-text');
+  if (!el || !txt) return;
+  if (!mapAreaFilterActive()) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  if (mapDrawnIcaoSet) {
+    txt.textContent = `Drawn area · ${mapDrawnIcaoSet.size.toLocaleString()} airport${mapDrawnIcaoSet.size===1?'':'s'}`;
+  } else {
+    const names = window.FSD_Globe ? window.FSD_Globe.selectedRegionNames() : [];
+    txt.textContent = names.length <= 2 ? (names.join(', ') || 'Area selected') : `${names.length} regions selected`;
+  }
+}
+
+// Called by the globe module (select-mode click, or a completed lasso draw).
+function onMapRegionToggle(regionId) {
+  if (mapSelectedRegions.has(regionId)) mapSelectedRegions.delete(regionId);
+  else mapSelectedRegions.add(regionId);
+  mapDrawnIcaoSet = null;
+  window.FSD_Globe.setSelectedRegions(mapSelectedRegions);
+  updateMapRegionStatus();
+  renderTable();
+}
+function onMapAreaDrawn(icaoSet) {
+  mapDrawnIcaoSet = icaoSet;
+  mapSelectedRegions.clear();
+  if (window.FSD_Globe) window.FSD_Globe.setSelectedRegions(mapSelectedRegions);
+  updateMapRegionStatus();
+  renderTable();
+}
+
+function setMapTool(tool) {
+  document.querySelectorAll('.globe-tool-btn[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+  document.getElementById('globe-draw-canvas').classList.toggle('active', tool === 'draw');
+  if (window.FSD_Globe) window.FSD_Globe.setTool(tool);
+}
+function toggleMapBorders() {
+  const btn = document.getElementById('globe-borders-toggle');
+  const on = btn.classList.toggle('active');
+  if (window.FSD_Globe) window.FSD_Globe.setBordersVisible(on);
 }
 
 function getSorted(arr) {
@@ -3262,6 +3378,28 @@ let activePinch = false, pinchStartDist = null, pinchStartDistance = null;
 const mouseNDC = new THREE.Vector2(-99, -99);
 const resolution = new THREE.Vector2();
 
+// ── borders / area-select / freehand-draw ──
+const BORDER_R = GLOBE_R * 1.0007;       // just above the surface, below route arcs (1.002) and airports (1.003)
+const REGION_MESH_R = GLOBE_R * 1.0004;  // clickable fill, sits just under the border lines
+// Natural Earth's 50m admin-1 file only carries state/province detail for
+// these large countries -- everywhere else in the world, "select a region"
+// falls back to country granularity (see loadRegionData).
+const BIG_COUNTRIES = new Set(['United States of America','Canada','Australia','Brazil','China','India','Indonesia','Russia','South Africa']);
+const COUNTRIES_URL = 'https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json';
+const STATES_URL = 'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_1_states_provinces.geojson';
+
+let regionGroup, borderGroup;
+let regions = [];              // [{id, name, polygons, bbox, label:[lon,lat], selectable}]
+let icaoRegion = new Map();    // ICAO -> region id (selectable regions only)
+let regionMeshes = new Map();  // region id -> THREE.Mesh
+let regionDataPromise = null;
+let selectedRegionIds = new Set();
+let labelSprites = [];
+let bordersVisible = true;
+let currentTool = 'none';      // 'none' | 'select' | 'draw'
+let hoveredRegionMesh = null;
+let drawCanvasEl, drawCtx, drawing = false, drawPath = [];
+
 function latLonToVec3(lat, lon, radius) {
   const phi = (90 - lat) * Math.PI / 180;
   const theta = (lon + 180) * Math.PI / 180;
@@ -3270,6 +3408,372 @@ function latLonToVec3(lat, lon, radius) {
     radius * Math.cos(phi),
     radius * Math.sin(phi) * Math.sin(theta)
   );
+}
+
+// ── STATE / COUNTRY BORDERS + AREA SELECTION ──
+// Two GeoJSON datasets, fetched once per session: world country outlines
+// (~180 countries) and Natural Earth's 50m admin-1 file, which only carries
+// state/province detail for BIG_COUNTRIES -- Natural Earth itself omits
+// finer subdivisions elsewhere at this scale. So the "Select" click-tool
+// resolves to state granularity inside those countries and country
+// granularity everywhere else; borders for all of them are still drawn.
+// The freehand "Draw area" tool needs none of this data -- it tests airport
+// screen positions directly against the drawn shape, so it covers anywhere.
+
+function ringToVec3s(ring, radius) {
+  return ring.map(([lon, lat]) => latLonToVec3(lat, lon, radius));
+}
+
+// Standard even-odd ray-casting point-in-polygon test, done directly in
+// lon/lat space. Good enough at state/country scale; the one known gap is
+// a handful of countries whose ring literally straddles the antimeridian
+// (mainly Russia) -- borders and the freehand draw tool are unaffected,
+// only "click to select" that specific country/state could misbehave.
+function pointInRing(lon, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    const intersect = ((yi > lat) !== (yj > lat)) &&
+      (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function ringBBox(ring) {
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+  for (const [lon, lat] of ring) {
+    if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+    if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+  }
+  return [minLon, minLat, maxLon, maxLat];
+}
+
+function polygonsFromGeometry(geom) {
+  if (!geom) return [];
+  if (geom.type === 'Polygon') return [geom.coordinates];
+  if (geom.type === 'MultiPolygon') return geom.coordinates;
+  return [];
+}
+
+function buildRegion(id, name, selectable, geom, labelLonLat) {
+  const polygons = polygonsFromGeometry(geom);
+  if (!polygons.length) return null;
+  let bbox = null;
+  for (const poly of polygons) {
+    const b = ringBBox(poly[0]);
+    bbox = bbox ? [Math.min(bbox[0],b[0]), Math.min(bbox[1],b[1]), Math.max(bbox[2],b[2]), Math.max(bbox[3],b[3])] : b;
+  }
+  let label = labelLonLat;
+  if (!label) {
+    let biggest = polygons[0][0];
+    for (const poly of polygons) if (poly[0].length > biggest.length) biggest = poly[0];
+    let sx = 0, sy = 0;
+    for (const [x, y] of biggest) { sx += x; sy += y; }
+    label = [sx / biggest.length, sy / biggest.length];
+  }
+  return { id, name, polygons, bbox, label, selectable };
+}
+
+function buildRegionMesh(region) {
+  const shapes = [];
+  for (const poly of region.polygons) {
+    const shape = new THREE.Shape(poly[0].map(([lon, lat]) => new THREE.Vector2(lon, lat)));
+    for (let i = 1; i < poly.length; i++) {
+      shape.holes.push(new THREE.Path(poly[i].map(([lon, lat]) => new THREE.Vector2(lon, lat))));
+    }
+    shapes.push(shape);
+  }
+  const geo = new THREE.ShapeGeometry(shapes, 1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const v = latLonToVec3(pos.getY(i), pos.getX(i), REGION_MESH_R);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({ color: ACCENT_COLOR, transparent: true, opacity: 0, depthWrite: false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.userData = { regionId: region.id };
+  return mesh;
+}
+
+function addRingSegments(ring, radius, out) {
+  const pts = ringToVec3s(ring, radius);
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    out.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+}
+
+function buildBorderLines() {
+  const countryPos = [], statePos = [];
+  for (const rg of regions) {
+    const out = rg.id.startsWith('S:') ? statePos : countryPos;
+    for (const poly of rg.polygons) for (const ring of poly) addRingSegments(ring, BORDER_R, out);
+  }
+  const mkLines = (positions, color, opacity) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
+    return new THREE.LineSegments(geo, mat);
+  };
+  if (statePos.length) borderGroup.add(mkLines(statePos, 0x8fa6bd, 0.28));
+  if (countryPos.length) borderGroup.add(mkLines(countryPos, 0xc9d6e3, 0.4));
+}
+
+function makeLabelSprite(text) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const fontSize = 28, pad = 8;
+  ctx.font = `600 ${fontSize}px sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  const h = fontSize + pad * 2;
+  canvas.width = w; canvas.height = h;
+  ctx.font = `600 ${fontSize}px sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(8,10,14,0.55)';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#f0ede8';
+  ctx.fillText(text, pad, h / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: true });
+  const sprite = new THREE.Sprite(mat);
+  const scale = 0.011; // world-units per texture pixel, tuned for GLOBE_R
+  sprite.scale.set(w * scale, h * scale, 1);
+  sprite.userData.aspect = h / w; // used by the declutter pass to estimate on-screen box height
+  return sprite;
+}
+
+async function loadRegionData() {
+  if (regionDataPromise) return regionDataPromise;
+  regionDataPromise = (async () => {
+    const [countriesRes, statesRes] = await Promise.all([
+      fetch(COUNTRIES_URL).then(r => r.json()).catch(() => null),
+      fetch(STATES_URL).then(r => r.json()).catch(() => null),
+    ]);
+    const built = [];
+    const detailedCountryNames = new Set();
+    if (statesRes && statesRes.features) {
+      for (const f of statesRes.features) {
+        const p = f.properties || {};
+        detailedCountryNames.add(p.admin);
+        const id = 'S:' + (p.adm1_code || (p.admin + '|' + p.name));
+        const label = (typeof p.longitude === 'number' && typeof p.latitude === 'number') ? [p.longitude, p.latitude] : null;
+        const r = buildRegion(id, p.name || 'Unknown', true, f.geometry, label);
+        if (r) built.push(r);
+      }
+    }
+    if (countriesRes && countriesRes.features) {
+      for (const f of countriesRes.features) {
+        const p = f.properties || {};
+        const name = p.name || 'Unknown';
+        const selectable = !detailedCountryNames.has(name) && !BIG_COUNTRIES.has(name);
+        const r = buildRegion('C:' + name, name, selectable, f.geometry, null);
+        if (r) built.push(r);
+      }
+    }
+    regions = built;
+    if (!regions.length) return; // both fetches failed -- leave borders/selection empty rather than throw
+
+    buildBorderLines();
+
+    // Assign each airport to the smallest-area selectable region that
+    // actually contains it (smallest-first so a state wins over its own
+    // country). bbox pre-check keeps this fast across thousands of airports.
+    const selectableRegions = regions.filter(r => r.selectable);
+    selectableRegions.sort((a, b) =>
+      (a.bbox[2]-a.bbox[0])*(a.bbox[3]-a.bbox[1]) - (b.bbox[2]-b.bbox[0])*(b.bbox[3]-b.bbox[1]));
+    const geo = window.AIRPORT_GEO || {};
+    for (const icao in geo) {
+      const [lat, lon] = geo[icao];
+      for (const rg of selectableRegions) {
+        const [minLon, minLat, maxLon, maxLat] = rg.bbox;
+        if (lon < minLon || lon > maxLon || lat < minLat || lat > maxLat) continue;
+        const hit = rg.polygons.some(poly =>
+          pointInRing(lon, lat, poly[0]) && !poly.slice(1).some(hole => pointInRing(lon, lat, hole)));
+        if (hit) { icaoRegion.set(icao, rg.id); break; }
+      }
+    }
+
+    for (const rg of selectableRegions) {
+      const mesh = buildRegionMesh(rg);
+      regionGroup.add(mesh);
+      regionMeshes.set(rg.id, mesh);
+    }
+
+    for (const rg of regions) {
+      const sprite = makeLabelSprite(rg.name);
+      sprite.position.copy(latLonToVec3(rg.label[1], rg.label[0], GLOBE_R * 1.012));
+      sprite.userData.isStateLabel = rg.id.startsWith('S:');
+      sprite.userData.revealDist = labelRevealDistance(rg);
+      scene.add(sprite);
+      labelSprites.push(sprite);
+    }
+
+    const selBtn = document.querySelector('.globe-tool-btn[data-tool="select"]');
+    if (selBtn) selBtn.disabled = false;
+    const bordersBtn = document.getElementById('globe-borders-toggle');
+    if (bordersBtn) bordersBtn.disabled = false;
+  })();
+  return regionDataPromise;
+}
+
+function setRegionMeshState(mesh, hovered, selected) {
+  const m = mesh.material;
+  if (selected) { m.color.set(SELECTED_COLOR); m.opacity = 0.32; }
+  else if (hovered) { m.color.set(ACCENT_COLOR); m.opacity = 0.16; }
+  else { m.opacity = 0; }
+}
+
+// Bigger regions become legible from farther out; tiny countries/states only
+// reveal their label once really zoomed in. Without scaling by size, all
+// ~470 labels would render at once regardless of zoom -- at world view that
+// was an unreadable pile of overlapping text, worst in dense clusters like
+// Central America/the Caribbean.
+function labelRevealDistance(region) {
+  const latRad = region.label[1] * Math.PI / 180;
+  const area = Math.max(0.02, (region.bbox[2]-region.bbox[0]) * (region.bbox[3]-region.bbox[1]) * Math.max(0.15, Math.cos(latRad)));
+  if (region.id.startsWith('S:')) {
+    // States are a drill-down layer -- capped tightly so even huge
+    // provinces (Ontario, Amazonas, Sakha) don't compete with country
+    // labels until the user has genuinely zoomed in past that country.
+    return Math.min(9.5, MIN_DIST + 1 + Math.sqrt(area) * 0.3);
+  }
+  return Math.min(MAX_DIST - 2, MIN_DIST + 2 + Math.sqrt(area) * 0.9);
+}
+
+// Perspective apparent size in pixels: real world-space size, foreshortened
+// by distance-to-camera and FOV, exactly as the renderer would draw it.
+function spriteScreenWidthPx(sprite, rectH) {
+  const d = camera.position.distanceTo(sprite.position);
+  const vFovRad = camera.fov * Math.PI / 180;
+  return (sprite.scale.x * rectH) / (2 * d * Math.tan(vFovRad / 2));
+}
+
+function updateLabelOpacity() {
+  if (!labelSprites.length || !renderer) return;
+  if (!bordersVisible) { for (const sprite of labelSprites) sprite.material.opacity = 0; return; }
+  const dist = camera.position.length();
+  const camDir = camera.position.clone().normalize();
+  const rectW = renderer.domElement.clientWidth || 1, rectH = renderer.domElement.clientHeight || 1;
+
+  // Pass 1: distance-based reveal (see labelRevealDistance) plus a
+  // front-face check -- sprites don't self-occlude against the far side of
+  // the globe the way real surface geometry does, so a near-horizon label
+  // would otherwise show through edge-on and unreadable.
+  const candidates = [];
+  for (const sprite of labelSprites) {
+    const rd = sprite.userData.revealDist;
+    const t = Math.max(0, Math.min(1, (rd - dist) / Math.max(0.5, rd - MIN_DIST)));
+    let opacity = t * (sprite.userData.isStateLabel ? 0.9 : 0.85);
+    if (opacity > 0.02 && sprite.position.dot(camDir) < GLOBE_R * 0.15) opacity = 0;
+    sprite.material.opacity = opacity;
+    if (opacity > 0.05) candidates.push(sprite);
+  }
+
+  // Pass 2: greedy on-screen declutter among whatever's currently fading
+  // in -- bigger regions (already sorted first, by revealDist) claim a
+  // screen slot; a rectangle (not circle) overlap test against each
+  // already-claimed slot means two labels stacked vertically with plenty
+  // of vertical gap can still coexist even if their (very different)
+  // widths overlap in x -- a circular test would wrongly cull one of them.
+  candidates.sort((a, b) => b.userData.revealDist - a.userData.revealDist);
+  const placed = [];
+  for (const sprite of candidates) {
+    const s = projectToScreen(sprite.position, rectW, rectH);
+    const w = spriteScreenWidthPx(sprite, rectH);
+    const h = w * sprite.userData.aspect;
+    const clash = placed.some(p => Math.abs(p.x - s.x) < (w + p.w) * 0.42 && Math.abs(p.y - s.y) < (h + p.h) * 0.55);
+    if (clash) sprite.material.opacity = 0;
+    else placed.push({ x: s.x, y: s.y, w, h });
+  }
+}
+
+// ── FREEHAND DRAW ──
+// A separate 2D canvas overlays the WebGL canvas while in draw mode (see
+// setTool) and captures the pointer instead, so dragging a lasso can't also
+// rotate the globe. On release, every airport currently on the visible
+// hemisphere is projected to screen space (reusing projectToScreen) and
+// tested against the drawn path -- no boundary data involved, so this works
+// for any shape, anywhere.
+function initDrawCanvas() {
+  drawCanvasEl = document.getElementById('globe-draw-canvas');
+  if (!drawCanvasEl) return;
+  drawCtx = drawCanvasEl.getContext('2d');
+  drawCanvasEl.addEventListener('pointerdown', onDrawPointerDown);
+  drawCanvasEl.addEventListener('pointermove', onDrawPointerMove);
+  drawCanvasEl.addEventListener('pointerup', onDrawPointerUp);
+  drawCanvasEl.addEventListener('pointercancel', onDrawPointerUp);
+  resizeDrawCanvas();
+}
+
+function resizeDrawCanvas() {
+  if (!drawCanvasEl) return;
+  const container = document.getElementById('globe-wrap');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  drawCanvasEl.width = (container.clientWidth || 1) * dpr;
+  drawCanvasEl.height = (container.clientHeight || 1) * dpr;
+  drawCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function onDrawPointerDown(e) {
+  drawing = true;
+  drawPath = [{ x: e.offsetX, y: e.offsetY }];
+  drawCanvasEl.setPointerCapture(e.pointerId);
+}
+function onDrawPointerMove(e) {
+  if (!drawing) return;
+  drawPath.push({ x: e.offsetX, y: e.offsetY });
+  redrawLasso();
+}
+function redrawLasso() {
+  const container = document.getElementById('globe-wrap');
+  drawCtx.clearRect(0, 0, container.clientWidth, container.clientHeight);
+  if (drawPath.length < 2) return;
+  drawCtx.beginPath();
+  drawCtx.moveTo(drawPath[0].x, drawPath[0].y);
+  for (let i = 1; i < drawPath.length; i++) drawCtx.lineTo(drawPath[i].x, drawPath[i].y);
+  drawCtx.closePath();
+  drawCtx.fillStyle = 'rgba(217,119,87,0.14)';
+  drawCtx.fill();
+  drawCtx.strokeStyle = '#d97757';
+  drawCtx.lineWidth = 2;
+  drawCtx.setLineDash([6, 4]);
+  drawCtx.stroke();
+}
+function pointInPath2D(px, py, path) {
+  let inside = false;
+  for (let i = 0, j = path.length - 1; i < path.length; j = i++) {
+    const xi = path[i].x, yi = path[i].y, xj = path[j].x, yj = path[j].y;
+    const intersect = ((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+function onDrawPointerUp(e) {
+  if (!drawing) return;
+  drawing = false;
+  const container = document.getElementById('globe-wrap');
+  drawCtx.clearRect(0, 0, container.clientWidth, container.clientHeight);
+  const path = drawPath; drawPath = [];
+  const xs = path.map(p => p.x), ys = path.map(p => p.y);
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  if (path.length < 3 || (w < 12 && h < 12)) return; // a plain tap, not a real lasso
+
+  const camDir = camera.position.clone().normalize();
+  const icaoSet = new Set();
+  const geo = window.AIRPORT_GEO || {};
+  for (const icao in geo) {
+    const [lat, lon] = geo[icao];
+    const v = latLonToVec3(lat, lon, GLOBE_R);
+    if (v.dot(camDir) < 0) continue; // far side of the globe -- not actually visible under the lasso
+    const s = projectToScreen(v, container.clientWidth, container.clientHeight);
+    if (pointInPath2D(s.x, s.y, path)) icaoSet.add(icao);
+  }
+  if (typeof window.onMapAreaDrawn === 'function') window.onMapAreaDrawn(icaoSet);
+  if (typeof window.setMapTool === 'function') window.setMapTool('none'); // back to rotate, so the result can be inspected
 }
 
 function arcPoints(g1, g2, radius) {
@@ -3378,6 +3882,10 @@ function init() {
 
     routeGroup = new THREE.Group();
     scene.add(routeGroup);
+    regionGroup = new THREE.Group();
+    scene.add(regionGroup);
+    borderGroup = new THREE.Group();
+    scene.add(borderGroup);
 
     raycaster = new THREE.Raycaster();
     renderer.domElement.addEventListener('pointermove', onPointerMove);
@@ -3389,6 +3897,8 @@ function init() {
     renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
     renderer.domElement.addEventListener('touchend', onTouchEnd);
     renderer.domElement.addEventListener('touchcancel', onTouchEnd);
+    initDrawCanvas();
+    loadRegionData(); // fire-and-forget -- populates borders/regions/labels once fetched
 
     const loadingEl = document.getElementById('globe-loading');
     if (loadingEl) loadingEl.style.display = 'none';
@@ -3410,6 +3920,7 @@ function onResize() {
   renderer.setSize(w, h, false);
   resolution.set(renderer.domElement.width, renderer.domElement.height);
   for (const line of arcLines) line.material.resolution.copy(resolution);
+  resizeDrawCanvas();
 }
 
 function onPointerMove(e) {
@@ -3540,7 +4051,26 @@ function pickLineTouchScreen(clientX, clientY, pixelRadius) {
   return best;
 }
 
+function pickRegionAt(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((clientX-rect.left)/rect.width)*2-1, -((clientY-rect.top)/rect.height)*2+1);
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(regionGroup.children, false);
+  return hits.length ? hits[0].object : null;
+}
+
 function handleClick(e, isTouch) {
+  if (currentTool === 'select') {
+    const hit = pickRegionAt(e.clientX, e.clientY);
+    if (hit) {
+      const id = hit.userData.regionId;
+      if (selectedRegionIds.has(id)) selectedRegionIds.delete(id); else selectedRegionIds.add(id);
+      setRegionMeshState(hit, hit === hoveredRegionMesh, selectedRegionIds.has(id));
+      if (typeof window.onMapRegionToggle === 'function') window.onMapRegionToggle(id);
+    }
+    return;
+  }
+  // tool === 'none' -- draw mode's own overlay canvas intercepts pointer events before they get here
   const hit = isTouch
     ? pickLineTouchScreen(e.clientX, e.clientY, TOUCH_TAP_RADIUS_PX)
     : pickLineAt(e.clientX, e.clientY, RAYCAST_THRESHOLD);
@@ -3568,7 +4098,20 @@ function setLineSelected(line, isSelected) {
 
 function checkHover() {
   pendingHoverCheck = false;
-  if (!renderer || !arcLines.length) return;
+  if (!renderer) return;
+  if (currentTool === 'select') {
+    if (!regionGroup.children.length) return;
+    raycaster.setFromCamera(mouseNDC, camera);
+    const hits = raycaster.intersectObjects(regionGroup.children, false);
+    const hit = hits.length ? hits[0].object : null;
+    if (hit === hoveredRegionMesh) return;
+    if (hoveredRegionMesh) setRegionMeshState(hoveredRegionMesh, false, selectedRegionIds.has(hoveredRegionMesh.userData.regionId));
+    hoveredRegionMesh = hit;
+    renderer.domElement.style.cursor = hit ? 'pointer' : '';
+    if (hit) setRegionMeshState(hit, true, selectedRegionIds.has(hit.userData.regionId));
+    return;
+  }
+  if (!arcLines.length) return;
   raycaster.setFromCamera(mouseNDC, camera);
   raycaster.params.Line2 = { threshold: RAYCAST_THRESHOLD };
   const hits = raycaster.intersectObjects(arcLines, false);
@@ -3610,6 +4153,7 @@ function animate() {
     camera.position.copy(controls.target).add(offset);
   }
   controls.update();
+  updateLabelOpacity();
   renderer.render(scene, camera);
 }
 
@@ -3711,7 +4255,28 @@ function hide() {
   if (hoveredLine) { setLineHoverAffordance(hoveredLine, false); hoveredLine = null; }
 }
 
-window.FSD_Globe = { init, update, show, hide };
+function setTool(tool) {
+  currentTool = tool;
+  if (hoveredRegionMesh) { setRegionMeshState(hoveredRegionMesh, false, selectedRegionIds.has(hoveredRegionMesh.userData.regionId)); hoveredRegionMesh = null; }
+  if (hoveredLine) { setLineHoverAffordance(hoveredLine, false); hoveredLine = null; }
+  if (renderer) renderer.domElement.style.cursor = '';
+}
+function setSelectedRegions(set) {
+  selectedRegionIds = new Set(set);
+  for (const [id, mesh] of regionMeshes) setRegionMeshState(mesh, mesh === hoveredRegionMesh, selectedRegionIds.has(id));
+}
+function selectedRegionNames() {
+  return regions.filter(r => selectedRegionIds.has(r.id)).map(r => r.name);
+}
+function regionOf(icao) {
+  return icaoRegion.get(icao) || null;
+}
+function setBordersVisible(v) {
+  bordersVisible = v;
+  if (borderGroup) borderGroup.visible = v;
+}
+
+window.FSD_Globe = { init, update, show, hide, setTool, setSelectedRegions, selectedRegionNames, regionOf, setBordersVisible };
 </script>
 </body>
 </html>
