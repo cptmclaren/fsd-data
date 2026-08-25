@@ -275,7 +275,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .globe-hint .hint-touch { display:inline; }
 }
 .globe-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text3); font-size:12px; flex-direction:column; gap:6px; }
-.globe-toolbar { position:absolute; top:10px; right:12px; display:flex; gap:4px; z-index:2; }
+.globe-toolbar { position:absolute; top:10px; right:12px; left:12px; display:flex; justify-content:flex-end; flex-wrap:wrap; gap:4px; z-index:2; }
 .globe-tool-btn { font-family:var(--sans); font-size:11px; font-weight:500; color:var(--text2); background:rgba(20,22,26,.72); backdrop-filter:blur(4px); border:1px solid var(--border2); padding:5px 9px; border-radius:var(--r2); cursor:pointer; display:flex; align-items:center; gap:4px; transition:background .1s,color .1s,border-color .1s; }
 .globe-tool-btn:hover { color:#fff; border-color:var(--text3); }
 .globe-tool-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
@@ -3343,7 +3343,8 @@ window.addEventListener('resize', positionSortIndicator);
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "topojson-client": "https://unpkg.com/topojson-client@3.1.0/src/index.js"
   }
 }
 </script>
@@ -3353,6 +3354,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { feature as topoFeature } from 'topojson-client';
 
 const GLOBE_R = 5;
 const MAX_ARCS = 3000;
@@ -3381,12 +3383,13 @@ const resolution = new THREE.Vector2();
 // ── borders / area-select / freehand-draw ──
 const BORDER_R = GLOBE_R * 1.0007;       // just above the surface, below route arcs (1.002) and airports (1.003)
 const REGION_MESH_R = GLOBE_R * 1.0004;  // clickable fill, sits just under the border lines
-// Natural Earth's 50m admin-1 file only carries state/province detail for
-// these large countries -- everywhere else in the world, "select a region"
-// falls back to country granularity (see loadRegionData).
-const BIG_COUNTRIES = new Set(['United States of America','Canada','Australia','Brazil','China','India','Indonesia','Russia','South Africa']);
 const COUNTRIES_URL = 'https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json';
-const STATES_URL = 'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_50m_admin_1_states_provinces.geojson';
+// Global admin-1 (state/province) boundaries -- Natural Earth's full 10m
+// file simplified to ~1.6MB and bundled in this repo (see world-states.topojson
+// in the repo root) so every country with subdivisions gets them, not just
+// a handful of large ones; same-origin also sidesteps jsDelivr's ~20-25MB
+// cap on its GitHub-proxy, which the unsimplified 40MB source blows past.
+const STATES_URL = './world-states.topojson';
 
 let regionGroup, borderGroup;
 let regions = [];              // [{id, name, polygons, bbox, label:[lon,lat], selectable}]
@@ -3522,25 +3525,31 @@ function buildBorderLines() {
   if (countryPos.length) borderGroup.add(mkLines(countryPos, 0xc9d6e3, 0.4));
 }
 
-function makeLabelSprite(text) {
+function makeLabelSprite(text, isState) {
+  // Google-Maps style: light text with a thin dark halo (stroke) for
+  // legibility against any terrain, no filled background box -- a solid
+  // box behind hundreds of labels is what read as "giant stickers" before.
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  const fontSize = 28, pad = 8;
-  ctx.font = `600 ${fontSize}px sans-serif`;
-  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
-  const h = fontSize + pad * 2;
+  const fontSize = isState ? 13 : 15, pad = 4;
+  const dpr = 2; // render at 2x and downscale via world-space size, so text stays crisp up close
+  ctx.font = `600 ${fontSize * dpr}px sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2 * dpr;
+  const h = fontSize * dpr + pad * 2 * dpr;
   canvas.width = w; canvas.height = h;
-  ctx.font = `600 ${fontSize}px sans-serif`;
+  ctx.font = `600 ${fontSize * dpr}px sans-serif`;
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(8,10,14,0.55)';
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#f0ede8';
-  ctx.fillText(text, pad, h / 2);
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(6,8,11,0.9)';
+  ctx.lineWidth = 3.5 * dpr;
+  ctx.strokeText(text, pad * dpr, h / 2);
+  ctx.fillStyle = isState ? '#dcd8d0' : '#ffffff';
+  ctx.fillText(text, pad * dpr, h / 2);
   const tex = new THREE.CanvasTexture(canvas);
   tex.minFilter = THREE.LinearFilter;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: true });
   const sprite = new THREE.Sprite(mat);
-  const scale = 0.011; // world-units per texture pixel, tuned for GLOBE_R
+  const scale = 0.0035 / dpr; // world-units per texture pixel, tuned for GLOBE_R -- small, like real map labels
   sprite.scale.set(w * scale, h * scale, 1);
   sprite.userData.aspect = h / w; // used by the declutter pass to estimate on-screen box height
   return sprite;
@@ -3549,17 +3558,19 @@ function makeLabelSprite(text) {
 async function loadRegionData() {
   if (regionDataPromise) return regionDataPromise;
   regionDataPromise = (async () => {
-    const [countriesRes, statesRes] = await Promise.all([
+    const [countriesRes, statesTopo] = await Promise.all([
       fetch(COUNTRIES_URL).then(r => r.json()).catch(() => null),
       fetch(STATES_URL).then(r => r.json()).catch(() => null),
     ]);
     const built = [];
     const detailedCountryNames = new Set();
-    if (statesRes && statesRes.features) {
-      for (const f of statesRes.features) {
+    if (statesTopo && statesTopo.objects) {
+      const key = Object.keys(statesTopo.objects)[0];
+      const fc = topoFeature(statesTopo, statesTopo.objects[key]); // decode TopoJSON arcs -> GeoJSON
+      for (const f of fc.features) {
         const p = f.properties || {};
         detailedCountryNames.add(p.admin);
-        const id = 'S:' + (p.adm1_code || (p.admin + '|' + p.name));
+        const id = 'S:' + (p.iso_3166_2 || (p.admin + '|' + p.name));
         const label = (typeof p.longitude === 'number' && typeof p.latitude === 'number') ? [p.longitude, p.latitude] : null;
         const r = buildRegion(id, p.name || 'Unknown', true, f.geometry, label);
         if (r) built.push(r);
@@ -3569,7 +3580,9 @@ async function loadRegionData() {
       for (const f of countriesRes.features) {
         const p = f.properties || {};
         const name = p.name || 'Unknown';
-        const selectable = !detailedCountryNames.has(name) && !BIG_COUNTRIES.has(name);
+        // Only fall back to country-level selection where the state dataset
+        // has no subdivisions for this country at all.
+        const selectable = !detailedCountryNames.has(name);
         const r = buildRegion('C:' + name, name, selectable, f.geometry, null);
         if (r) built.push(r);
       }
@@ -3604,9 +3617,10 @@ async function loadRegionData() {
     }
 
     for (const rg of regions) {
-      const sprite = makeLabelSprite(rg.name);
+      const isState = rg.id.startsWith('S:');
+      const sprite = makeLabelSprite(rg.name, isState);
       sprite.position.copy(latLonToVec3(rg.label[1], rg.label[0], GLOBE_R * 1.012));
-      sprite.userData.isStateLabel = rg.id.startsWith('S:');
+      sprite.userData.isStateLabel = isState;
       sprite.userData.revealDist = labelRevealDistance(rg);
       scene.add(sprite);
       labelSprites.push(sprite);
