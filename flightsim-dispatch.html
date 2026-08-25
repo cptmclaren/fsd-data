@@ -4130,10 +4130,13 @@ function onPointerMove(e) {
     const [curLat, curLon] = vec3ToLatLon(cur);
     const dLon = wrapLonDelta(curLon - dragStartGrabLon);
     const dLat = curLat - dragStartGrabLat;
-    // Dragging right reveals territory to the west, so the camera's own
-    // sub-point moves the opposite way the grabbed point moved.
+    // Dragging right reveals territory to the west, and dragging up
+    // reveals territory to the south -- the camera's own sub-point always
+    // moves the opposite way the grabbed point moved (verified numerically:
+    // matching the lon convention onto lat with a `+` here, instead of `-`,
+    // is exactly what made vertical panning feel reversed).
     camLon = dragStartCamLon - dLon;
-    camLat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, dragStartCamLat + dLat));
+    camLat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, dragStartCamLat - dLat));
     applyCamLatLon();
 
     // Track angular velocity (this move's incremental lat/lon change over
@@ -4142,7 +4145,7 @@ function onPointerMove(e) {
     const dt = (now - dragLastMoveTime) / 1000;
     if (dt > 0.001) {
       yawVel = -wrapLonDelta(curLon - dragLastLon) / dt;
-      pitchVel = (curLat - dragLastLat) / dt;
+      pitchVel = -(curLat - dragLastLat) / dt;
     }
     dragLastLat = curLat; dragLastLon = curLon;
     dragLastMoveTime = now;
