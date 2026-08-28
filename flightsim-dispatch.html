@@ -100,27 +100,30 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 .token-dur { background:rgba(201,162,39,.1); color:var(--amber); border-color:rgba(201,162,39,.25); }
 .smart-hint { font-size:10px; color:var(--text3); margin-top:4px; font-family:var(--mono); }
 
-/* ── SUGGEST A DESTINATION (AI prompt box) ── */
-.suggest-wrap { padding:10px 12px; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--accent-dim2); display:flex; flex-direction:column; gap:6px; }
-.suggest-row { display:flex; gap:5px; }
-.suggest-row2 { display:flex; }
-.suggest-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--sans); font-size:12px; padding:5px 9px; outline:none; transition:border-color .15s; }
-.suggest-input:focus { border-color:var(--accent); }
-.suggest-input::placeholder { color:var(--text3); font-size:11px; }
-.suggest-btn { background:var(--accent); border:none; border-radius:var(--r); color:#fff; font-family:var(--mono); font-size:11px; font-weight:600; padding:0 12px; cursor:pointer; transition:background .18s, transform .12s; letter-spacing:.04em; }
-.suggest-btn:hover { background:var(--accent2); }
-.suggest-btn:active { transform:scale(0.96); }
-.suggest-btn:disabled { opacity:.5; cursor:default; }
-#suggest-legs { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text2); font-family:var(--sans); font-size:11px; padding:4px 8px; cursor:pointer; }
+/* ── SUGGEST A DESTINATION (chat) ── */
+.suggest-pane { display:flex; flex-direction:column; padding:0; overflow:hidden; }
+.chat-thread { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
+.chat-empty-hint { color:var(--text3); font-size:13px; text-align:center; padding:0 24px; margin:auto; max-width:380px; line-height:1.5; }
+.chat-msg { display:flex; flex-direction:column; max-width:min(560px, 90%); }
+.chat-msg.user { align-self:flex-end; align-items:flex-end; }
+.chat-msg.assistant { align-self:flex-start; align-items:flex-start; width:100%; }
+.chat-bubble { border-radius:14px; padding:9px 13px; font-size:13px; line-height:1.45; white-space:pre-wrap; }
+.chat-msg.user .chat-bubble { background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+.chat-msg.assistant .chat-bubble { background:var(--bg3); color:var(--text); border:1px solid var(--border2); border-bottom-left-radius:4px; }
+.chat-bubble.error { color:#e08383; border-color:rgba(224,131,131,.3) !important; }
+.chat-bubble.pending { color:var(--text3); font-style:italic; }
+.chat-cards { display:flex; flex-direction:column; gap:10px; margin-top:8px; width:100%; }
 
-/* Results live in the main panel's "Suggest" tab, not the sidebar --
-   there's no room next to the filters for more than one card. */
-.suggest-pane { padding:16px; overflow-y:auto; }
-.suggest-status { font-size:11px; color:var(--text3); margin-bottom:10px; font-family:var(--mono); min-height:14px; }
-.suggest-status.error { color:#e08383; }
-.suggest-results { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; align-content:start; }
-.suggest-empty-hint { display:none; color:var(--text3); font-size:13px; text-align:center; padding:80px 0; }
-.suggest-results:empty + .suggest-empty-hint { display:block; }
+.chat-input-row { display:flex; gap:8px; padding:10px 14px; border-top:1px solid var(--border); background:var(--bg2); flex-shrink:0; }
+.chat-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text); font-family:var(--sans); font-size:13px; padding:8px 12px; outline:none; transition:border-color .15s; }
+.chat-input:focus { border-color:var(--accent); }
+.chat-input::placeholder { color:var(--text3); font-size:12px; }
+.chat-send-btn { background:var(--accent); border:none; border-radius:var(--r); color:#fff; font-family:var(--mono); font-size:11px; font-weight:600; padding:0 16px; cursor:pointer; transition:background .18s, transform .12s; letter-spacing:.04em; }
+.chat-send-btn:hover { background:var(--accent2); }
+.chat-send-btn:active { transform:scale(0.96); }
+.chat-send-btn:disabled { opacity:.5; cursor:default; }
+.chat-reset-btn { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r); color:var(--text2); font-size:14px; width:34px; cursor:pointer; transition:background .15s, color .15s; flex-shrink:0; }
+.chat-reset-btn:hover { background:var(--bg4); color:var(--text); }
 
 .sg-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:12px 14px; transition:border-color .15s; }
 .sg-card:hover { border-color:var(--accent2); }
@@ -642,26 +645,9 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
     <!-- ══ LEFT PANEL ══ -->
     <div class="left">
 
-      <!-- Suggest a destination (AI prompt box) -- results render in the
-           main panel's "Suggest" tab (#suggest-pane), not here; there's no
-           room here for more than one card. -->
-      <div class="suggest-wrap">
-        <div class="smart-label">Suggest a destination</div>
-        <div class="suggest-row">
-          <input class="suggest-input" id="suggest-input" type="text"
-            placeholder='e.g. "flying from KDFW, something scenic, 777"'>
-          <button class="suggest-btn" id="suggest-btn" onclick="suggestFromPrompt()">Suggest</button>
-        </div>
-        <div class="suggest-row2">
-          <select id="suggest-legs">
-            <option value="">Single destination</option>
-            <option value="2">2-leg trip</option>
-            <option value="3">3-leg trip</option>
-            <option value="4">4-leg trip</option>
-            <option value="5">5-leg trip</option>
-          </select>
-        </div>
-      </div>
+      <!-- Suggest a destination is now a full chat thread -- see the
+           "Suggest" tab (#suggest-pane) in the main panel; there's no room
+           here in the sidebar for an actual conversation. -->
 
       <!-- Quick search -->
       <div class="smart-search-wrap">
@@ -1086,9 +1072,17 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
           <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
         </div>
         <div class="suggest-pane view-pane view-hidden" id="suggest-pane">
-          <div class="suggest-status" id="suggest-status"></div>
-          <div class="suggest-results" id="suggest-results"></div>
-          <div class="suggest-empty-hint" id="suggest-empty-hint">Describe what you want to fly on the left, then hit Suggest.</div>
+          <div class="chat-thread" id="chat-thread">
+            <div class="chat-empty-hint" id="chat-empty-hint">
+              Tell me what you want to fly — e.g. "flying from EGLL, something mountainous, 8 to 10 hours" — and refine it as you go.
+            </div>
+          </div>
+          <div class="chat-input-row">
+            <input class="chat-input" id="chat-input" type="text"
+              placeholder='e.g. "flying from KDFW, something scenic, 777"'>
+            <button class="chat-send-btn" id="chat-send-btn" onclick="sendChatMessage()">Send</button>
+            <button class="chat-reset-btn" id="chat-reset-btn" onclick="resetChat()" title="New conversation" style="display:none;"><i class="ti ti-plus" aria-hidden="true"></i></button>
+          </div>
         </div>
       </div>
 
@@ -2176,11 +2170,16 @@ function resolveTargetUtc(understood) {
   return null;
 }
 
-async function callAiParse(prompt) {
+// `history` is the whole conversation so far (see sendChatMessage) -- lets
+// the model resolve something said several turns ago (departure, aircraft)
+// without it being repeated every message, and ask a clarifying question
+// (understood.needsClarification/clarifyingQuestion) instead of failing
+// outright when no departure is known yet.
+async function callAiParse(history) {
   const resp = await fetch(FSD_BASE + '/ai-parse', {
     method: 'POST',
     headers: { ...FSD_HEADERS, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ history }),
   });
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || ('AI request failed (' + resp.status + ')'));
@@ -2195,21 +2194,44 @@ async function callAiParse(prompt) {
 // curated tier is passed only as a hint, never a filter -- the AI can and
 // does override it (verified: it skipped a "premium"-tagged airport and
 // picked unhinted ones on their own geographic merit instead).
-async function callAiRank(prompt, candidates, count) {
+// `history` is the real conversation so far (see sendChatMessage) -- lets
+// the model track refinements ("not that one, further north") and write a
+// natural "reply" instead of just handing back bare picks. `count` is
+// always several (even for a single-destination request -- see buildChain's
+// comment on fallback candidates), so `showAsOptions` tells the model
+// whether the pilot actually asked for a list or just wants ONE confident
+// recommendation despite several picks coming back in the array.
+async function callAiRank(history, candidates, count, showAsOptions) {
   const resp = await fetch(FSD_BASE + '/ai-rank', {
     method: 'POST',
     headers: { ...FSD_HEADERS, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, candidates, count }),
+    body: JSON.stringify({ history, candidates, count, showAsOptions: !!showAsOptions }),
   });
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || ('AI ranking failed (' + resp.status + ')'));
-  return data.picks || [];
+  return { reply: data.reply || '', picks: data.picks || [] };
+}
+
+// Fisher-Yates -- used to pick which candidates survive the server's
+// MAX_RANK_CANDIDATES cap (see destCandidatesFor) without a systematic
+// bias toward whichever destinations happen to sort first.
+function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 // One candidate per distinct reachable destination (not per route) --
-// that's the granularity the AI reasons over. Curated-tier candidates are
-// sorted first so they survive the /ai-rank request-size cap even when a
-// departure has hundreds of historical destinations.
+// that's the granularity the AI reasons over. Shuffled (not curated-tier-
+// first, as before) -- curatedTier means "has a payware MSFS scenery
+// add-on", which correlates with being a busy real-world hub (that's
+// commercially where add-on makers focus), not with natural beauty.
+// Sorting those first meant a departure with 60+ curated destinations
+// could fill the entire /ai-rank request-size cap with big hub airports
+// before a single genuinely scenic, uncurated small airport was ever seen
+// by the model -- a real, systematic bias, not just a prompt-wording gap.
 function destCandidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin) {
   const routes = candidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin);
   const byDest = new Map();
@@ -2217,8 +2239,7 @@ function destCandidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin
     if (!byDest.has(f.arr)) byDest.set(f.arr, []);
     byDest.get(f.arr).push(f);
   }
-  const list = [...byDest.keys()].map(destInfo);
-  list.sort((a, b) => (b.curatedTier ? 1 : 0) - (a.curatedTier ? 1 : 0));
+  const list = shuffleInPlace([...byDest.keys()]).map(destInfo);
   return { byDest, list };
 }
 
@@ -2230,6 +2251,12 @@ function destInfo(icao) {
   const info = { icao, name: ap[0] || icao, city: ap[1] || ap[0] || icao, country: ap[2] || '' };
   const label = { 5: 'premium', 4: 'deluxe', 3: 'standard' }[sceneryTierRank(icao)];
   if (label) info.curatedTier = label;
+  // Total route count (dep+arr) in the historical DB -- a free, real,
+  // data-driven proxy for "how much of a generic connectivity hub is
+  // this", passed to /ai-rank so it can discount size/fame on its own
+  // rather than relying purely on the model recognizing famous IATA codes.
+  const connections = (IDX_DEP.get(icao)||[]).length + (IDX_ARR.get(icao)||[]).length;
+  if (connections) info.connections = connections;
   return info;
 }
 
@@ -2339,10 +2366,15 @@ function candidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin) {
 // Greedy same-family chain, ground-time buffer between legs. Only the
 // final leg goes through AI scenic-ranking -- intermediate legs are just
 // connections and get picked by soonest reasonable timing, same as before.
-async function buildChain(prompt, startIcao, understood, legs) {
+// `history` is the whole conversation (see sendChatMessage) -- threaded
+// through to the final leg's AI-rank call so it can reason with real
+// context and write a natural reply. `priorIcaos` (default none) is every
+// destination already shown earlier in this conversation, folded into
+// `used` so a fresh request in the same chat doesn't re-suggest one.
+async function buildChain(history, startIcao, understood, legs, priorIcaos) {
   const itinerary = [];
   let current = startIcao;
-  const used = new Set([startIcao]);
+  const used = new Set([startIcao, ...(priorIcaos || [])]);
   let departInMin = understood.departInMin != null ? understood.departInMin : 45;
   let nowUtc = new Date();
   const targetUtc = resolveTargetUtc(understood); // only applied to the final leg, below
@@ -2403,7 +2435,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
       remainingMin != null ? remainingMin : undefined,
       neededMin != null ? Math.max(0, neededMin) : undefined);
     if (!list.length) return null;
-    const picks = await callAiRank(prompt, list, 5);
+    const { reply, picks } = await callAiRank(history, list, 5);
     if (!picks.length) return null;
     let picked = null, pickedReason = '';
     for (const pick of picks) {
@@ -2420,6 +2452,7 @@ async function buildChain(prompt, startIcao, understood, legs) {
       depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: picked.arrivalUtc,
       reason: pickedReason || 'scenic destination',
     });
+    itinerary.reply = reply; // attached to the array, not a separate return shape -- see comment on the function
   }
   return itinerary;
 }
@@ -2430,7 +2463,8 @@ async function buildChain(prompt, startIcao, understood, legs) {
 // `understood.legs` (from the "N-leg trip" selector or the AI itself) is
 // the TOTAL including the return -- 2 is the simple direct out-and-back
 // case; >2 means one or more short connecting hops before the turnaround.
-async function buildRoundTrip(prompt, startIcao, understood) {
+// `history`/`priorIcaos` -- see buildChain's comment, same meaning here.
+async function buildRoundTrip(history, startIcao, understood, priorIcaos) {
   const targetUtc = resolveTargetUtc(understood);
   const totalLegs = understood.legs || 2;
   const GROUND_MIN = 45;
@@ -2445,9 +2479,9 @@ async function buildRoundTrip(prompt, startIcao, understood) {
     // No minDurMin filter here -- a floor applies to the OUTBOUND+RETURN
     // total, and at this point we don't know the return leg's duration
     // yet, so it's enforced below once both legs are known.
-    const { byDest, list } = destCandidatesFor(startIcao, understood, new Set([startIcao]), maxTotalMin != null ? maxTotalMin : undefined);
+    const { byDest, list } = destCandidatesFor(startIcao, understood, new Set([startIcao, ...(priorIcaos || [])]), maxTotalMin != null ? maxTotalMin : undefined);
     if (!list.length) return null;
-    const picks = await callAiRank(prompt, list, 5);
+    const { reply, picks } = await callAiRank(history, list, 5);
     const departInMin = understood.departInMin != null ? understood.departInMin : 45;
     const outNowUtc = new Date();
 
@@ -2474,7 +2508,7 @@ async function buildRoundTrip(prompt, startIcao, understood) {
       if (!retPicked) continue;
       if (targetUtc && Math.abs(retPicked.arrivalUtc.getTime() - targetUtc.getTime()) / 60000 > TOLERANCE_MIN) continue; // misses the deadline -- try next pick
 
-      return [
+      const result = [
         {
           leg: 1, f: outPicked.f, tier: outPicked.tier,
           depUtc: new Date(outNowUtc.getTime() + departInMin * 60000), arrUtc: outPicked.arrivalUtc,
@@ -2486,6 +2520,8 @@ async function buildRoundTrip(prompt, startIcao, understood) {
           reason: '',
         },
       ];
+      result.reply = reply;
+      return result;
     }
     return null;
   }
@@ -2509,7 +2545,7 @@ async function buildRoundTrip(prompt, startIcao, understood) {
   // dropped here and enforced only once the return leg is known, same as
   // the <=2-leg case above.
   const outboundUnderstood = minTotalMin != null ? { ...understood, minTotalMin: undefined } : understood;
-  const chain = await buildChain(prompt, startIcao, outboundUnderstood, outboundLegs);
+  const chain = await buildChain(history, startIcao, outboundUnderstood, outboundLegs, priorIcaos);
   if (!chain) return null;
   const lastLeg = chain[chain.length - 1];
   // buildChain already enforced maxTotalMin across the outbound legs, but
@@ -2712,81 +2748,141 @@ function renderChain(chain) {
     </div>`;
 }
 
-async function suggestFromPrompt() {
-  const btn = document.getElementById('suggest-btn');
-  // Reentrancy guard. The Enter-key handler below calls this function
-  // directly and isn't blocked by the button's own disabled state, so
-  // pressing Enter again (or key-repeat) before a request finishes used
-  // to start a second, overlapping call. The two calls then raced for
-  // the shared #suggest-legs value below (whichever one's AI-parse
-  // resolved second would read it after the first had already reset it
-  // to ''), silently downgrading a multi-leg request to a single
-  // destination. This guard, combined with reading+resetting the
-  // selector synchronously (no await in between) rather than after the
-  // AI round-trip, removes the race outright.
-  if (btn.disabled) return;
-  const status = document.getElementById('suggest-status');
-  const results = document.getElementById('suggest-results');
-  const prompt = document.getElementById('suggest-input').value.trim();
-  if (!prompt) return;
+// ── SUGGEST A DESTINATION (chat) ──
+// Full conversation, held client-side and re-sent whole on every turn (the
+// worker is stateless -- see worker.js's /ai-parse and /ai-rank). Both AI
+// calls get the real history now, not just the latest message, so a
+// follow-up like "not that one, further north" is resolved in context the
+// same way any chat model handles it.
+let chatHistory = [];               // [{role:'user'|'assistant', text}]
+let chatSuggestedIcaos = new Set(); // every destination shown so far this conversation -- excluded from later candidate lists so nothing repeats
+let chatBusy = false;
 
-  setView('suggest');
+function chatMessagesForApi() {
+  return chatHistory.map(m => ({ role: m.role, content: m.text }));
+}
+// A shorter window for /ai-rank specifically -- unlike /ai-parse (which
+// benefits from full history to resolve filters stated many turns back),
+// ranking mainly needs to catch a RECENT rejection/refinement ("not that
+// one, further north"), and each rank call already carries a real token
+// cost on top of that (the candidate list itself, ~15-20 tokens each).
+// Trimming this is what keeps a several-turn conversation from growing
+// its per-call token cost the way sending full history to every call
+// would.
+function chatMessagesForRank() {
+  return chatMessagesForApi().slice(-8);
+}
+
+function renderChatBubble(role, text, opts) {
+  opts = opts || {};
+  const thread = document.getElementById('chat-thread');
+  const hint = document.getElementById('chat-empty-hint');
+  if (hint) hint.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg ' + role;
+  const bubble = document.createElement('div');
+  bubble.className = ['chat-bubble', opts.pending ? 'pending' : '', opts.error ? 'error' : ''].filter(Boolean).join(' ');
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+  thread.appendChild(wrap);
+  thread.scrollTop = thread.scrollHeight;
+  document.getElementById('chat-reset-btn').style.display = '';
+  return wrap;
+}
+
+// Swaps a pending ("Thinking…") bubble for the real reply, optionally
+// appending destination card(s) below it -- `cardsHtml` reuses the exact
+// same renderSingleSuggestion/renderChain markup the old one-shot form did.
+function updateChatBubble(node, text, opts) {
+  opts = opts || {};
+  const bubble = node.querySelector('.chat-bubble');
+  bubble.textContent = text;
+  bubble.classList.remove('pending');
+  bubble.classList.toggle('error', !!opts.error);
+  if (opts.cardsHtml) {
+    const cardsDiv = document.createElement('div');
+    cardsDiv.className = 'chat-cards';
+    cardsDiv.innerHTML = opts.cardsHtml;
+    node.appendChild(cardsDiv);
+  }
+  document.getElementById('chat-thread').scrollTop = document.getElementById('chat-thread').scrollHeight;
+}
+
+function resetChat() {
+  chatHistory = [];
+  chatSuggestedIcaos.clear();
+  document.getElementById('chat-thread').innerHTML =
+    '<div class="chat-empty-hint" id="chat-empty-hint">Tell me what you want to fly — e.g. "flying from EGLL, something mountainous, 8 to 10 hours" — and refine it as you go.</div>';
+  document.getElementById('chat-reset-btn').style.display = 'none';
+  const input = document.getElementById('chat-input');
+  input.value = '';
+  input.focus();
+}
+
+async function sendChatMessage() {
+  if (chatBusy) return; // reentrancy guard -- Enter fires this directly, same as before
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const btn = document.getElementById('chat-send-btn');
+
+  chatBusy = true;
   btn.disabled = true;
-  status.textContent = 'Asking AI…';
-  status.classList.remove('error');
-  results.innerHTML = '';
+  input.value = '';
+  setView('suggest');
 
-  // The "N-leg trip" selector is an explicit override -- if set, it wins
-  // regardless of whether the prompt itself mentioned a trip, so multi-leg
-  // planning doesn't depend on phrasing it just right in English. Read and
-  // reset it right here, synchronously, before anything async happens --
-  // it must not still be sitting there (or already cleared by a prior
-  // in-flight call) by the time a later `await` resumes.
-  const legsSelEl = document.getElementById('suggest-legs');
-  const legsSel = legsSelEl.value;
-  legsSelEl.value = '';
+  chatHistory.push({ role: 'user', text });
+  renderChatBubble('user', text);
+  const pendingNode = renderChatBubble('assistant', 'Thinking…', { pending: true });
+  const finish = (replyText, opts) => {
+    chatHistory.push({ role: 'assistant', text: replyText });
+    updateChatBubble(pendingNode, replyText, opts);
+  };
 
   try {
-    const [understood] = await Promise.all([callAiParse(prompt), loadHandcraftedScenery()]);
-    const dep = understood.dep || (document.getElementById('dep').value.trim().toUpperCase().split(',')[0] || '');
-    if (!dep) throw new Error('Name a departure airport (e.g. "flying from KDFW…")');
-    if (!IDX_DEP.has(dep)) throw new Error(`No routes found departing ${dep}`);
+    const [understood] = await Promise.all([callAiParse(chatMessagesForApi()), loadHandcraftedScenery()]);
 
-    if (legsSel) { understood.multileg = true; understood.legs = parseInt(legsSel); }
+    if (understood.needsClarification) {
+      finish(understood.clarifyingQuestion || 'Could you say a bit more about what you’re looking for?');
+      return;
+    }
+
+    const dep = understood.dep || (document.getElementById('dep').value.trim().toUpperCase().split(',')[0] || '');
+    if (!dep) throw new Error('Name a departure airport, e.g. "flying from KDFW…"');
+    if (!IDX_DEP.has(dep)) throw new Error(`No routes found departing ${dep}`);
 
     // This tool has no login/flight history for anyone -- say so plainly
     // rather than silently ignoring "places I've never been" style requests.
     const historyNote = understood.historyMentioned
-      ? 'Note: this tool has no flight history for anyone (no login) — ranking by scenic + timing only. '
+      ? 'Heads up: this tool has no flight history for anyone (no login), so I can’t factor that in — going by fit + timing only. '
       : '';
 
     if (understood.returnToOrigin) {
-      status.textContent = historyNote + 'Planning round trip…';
-      const trip = await buildRoundTrip(prompt, dep, understood);
-      if (!trip) throw new Error('No round trip found that gets you back in time — try relaxing the deadline or aircraft/airline');
-      results.innerHTML = renderChain(trip);
+      const trip = await buildRoundTrip(chatMessagesForRank(), dep, understood, chatSuggestedIcaos);
+      if (!trip) throw new Error('No round trip found that gets you back in time — try relaxing the deadline or aircraft/airline.');
+      trip.forEach(l => chatSuggestedIcaos.add(l.f.arr));
+      finish(historyNote + (trip.reply || `Here's a round trip from ${dep}.`), { cardsHtml: renderChain(trip) });
     } else if (understood.multileg) {
       const legs = understood.legs || 3;
-      status.textContent = historyNote + 'Planning trip…';
-      const chain = await buildChain(prompt, dep, understood, legs);
-      if (!chain) throw new Error('No complete multi-leg chain found — try fewer legs or a different aircraft/airline');
-      results.innerHTML = renderChain(chain);
+      const chain = await buildChain(chatMessagesForRank(), dep, understood, legs, chatSuggestedIcaos);
+      if (!chain) throw new Error('No complete multi-leg chain found — try fewer legs or a different aircraft/airline.');
+      chain.forEach(l => chatSuggestedIcaos.add(l.f.arr));
+      finish(historyNote + (chain.reply || `Here's a ${legs}-leg trip from ${dep}.`), { cardsHtml: renderChain(chain) });
     } else {
       const nowUtc = new Date();
       const targetUtc = resolveTargetUtc(understood);
       const isList = understood.mode === 'list';
       // Always rank several candidates, even for a single-pick request --
-      // same fix as buildChain's final leg: the AI's top scenic pick can
-      // have a schedule that only lands at night, and without alternatives
-      // to fall back to there was nothing left to prefer daylight with.
-      const { byDest, list } = destCandidatesFor(dep, understood, new Set([dep]),
+      // same fix as buildChain's final leg: the AI's top pick can have a
+      // schedule that only lands at night, and without alternatives to
+      // fall back to there was nothing left to prefer daylight with.
+      const { byDest, list } = destCandidatesFor(dep, understood, new Set([dep, ...chatSuggestedIcaos]),
         understood.maxTotalMin != null ? understood.maxTotalMin : undefined,
         understood.minTotalMin != null ? understood.minTotalMin : undefined);
       if (!list.length) throw new Error(`No matching routes departing ${dep}`);
 
-      status.textContent = historyNote + 'Reasoning about scenic destinations…';
-      const picks = await callAiRank(prompt, list, 5);
-      if (!picks.length) throw new Error('No scenic destinations matched — try relaxing the request');
+      const { reply, picks } = await callAiRank(chatMessagesForRank(), list, 5, isList);
+      if (!picks.length) throw new Error(reply || 'No destinations matched — try relaxing the request.');
 
       let rendered;
       if (isList) {
@@ -2813,29 +2909,21 @@ async function suggestFromPrompt() {
         }
         rendered = best ? [best] : [];
       }
-      if (!rendered.length) throw new Error('No scenic destinations matched — try relaxing the request');
-      results.innerHTML = rendered.map(renderSingleSuggestion).join('');
+      if (!rendered.length) throw new Error(reply || 'No destinations matched — try relaxing the request.');
+      rendered.forEach(r => chatSuggestedIcaos.add(r.f.arr));
+      finish(historyNote + (reply || 'Here you go.'), { cardsHtml: rendered.map(renderSingleSuggestion).join('') });
     }
-    status.textContent = historyNote;
   } catch (e) {
-    status.textContent = e.message || String(e);
-    status.classList.add('error');
+    finish(e.message || String(e), { error: true });
   } finally {
+    chatBusy = false;
     btn.disabled = false;
+    input.focus();
   }
 }
 
-document.getElementById('suggest-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') suggestFromPrompt();
-});
-// Clearing the prompt clears whatever's currently shown -- results
-// shouldn't linger once the text that produced them is gone.
-document.getElementById('suggest-input').addEventListener('input', (e) => {
-  if (!e.target.value.trim()) {
-    document.getElementById('suggest-results').innerHTML = '';
-    document.getElementById('suggest-status').textContent = '';
-    document.getElementById('suggest-status').classList.remove('error');
-  }
+document.getElementById('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendChatMessage();
 });
 
 // ── RESET ──

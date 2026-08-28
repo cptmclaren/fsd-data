@@ -448,6 +448,17 @@ If few or none of the candidates genuinely fit, return fewer picks than
 asked (even zero) rather than padding with weak choices -- say so plainly
 in "reply" instead.
 
+wantCount is how many entries to put in "picks" -- but that's often
+larger than what the pilot will actually see: the app always asks for
+several as internal fallbacks (in case its top choice's schedule lands at
+night, it tries the next one down), not necessarily because the pilot
+wants a list of options. Only write "reply" as introducing multiple
+options ("here are a few picks...") when showAsOptions is true. When it's
+false (the common case), write "reply" as recommending ONE specific
+place, confidently, even though you're still asked to return several
+picks in the array -- never say "here are five" or similar when
+showAsOptions is false.
+
 Reply with ONLY JSON:
 {"reply":"one or two natural, conversational sentences introducing the
 pick(s) -- write like you're actually replying in the chat, not
@@ -486,6 +497,15 @@ async function handleAiRank(request, env) {
   const history = sanitizeHistory(body && body.history);
   const candidates = Array.isArray(body && body.candidates) ? body.candidates.slice(0, MAX_RANK_CANDIDATES) : [];
   const count = Math.min(Math.max(parseInt(body && body.count) || 1, 1), 5);
+  // Whether the pilot actually asked for multiple options to choose from
+  // (vs the client always requesting up to `count` candidates internally,
+  // even for a single-destination request, purely as fallbacks in case the
+  // top pick's schedule lands at night -- see buildChain's comment). Without
+  // this the model had no way to know a "wantCount:5" request was really
+  // "give me several to pick from as backups", not "the pilot wants five
+  // options" -- it would write a reply like "here are five..." even when
+  // the app was only ever going to show the single best-timed one.
+  const showAsOptions = !!(body && body.showAsOptions);
   if (!candidates.length) return corsJson({ error: "candidates is required" }, 400);
   if (!history.length || history[history.length - 1].role !== "user") {
     return corsJson({ error: "history must be a non-empty conversation ending in a user message" }, 400);
@@ -501,6 +521,7 @@ async function handleAiRank(request, env) {
   // then gets the literal reachable-candidate data to choose from here.
   const candidateMsg = JSON.stringify({
     wantCount: count,
+    showAsOptions,
     candidates: candidates.map(c => ({
       icao: c.icao, name: c.name, city: c.city, country: c.country,
       ...(c.curatedTier ? { curatedTier: c.curatedTier } : {}),
