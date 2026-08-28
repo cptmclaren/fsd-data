@@ -196,6 +196,14 @@ whichever of these apply:
     this together with returnToOrigin -- those are different trip shapes.
   legs: integer 2-5, only if multileg is true and a count is implied (omit
     to default to 3 if multileg but no count given).
+  finalArr: departure airport ICAO code (4 letters, uppercase) that a
+    multileg trip must specifically END at, ONLY if one is explicitly
+    named ("4 leg trip ending at LAX" -> "KLAX", "...finishing in Tokyo"
+    -> the city's ICAO). Only set alongside multileg:true, never with
+    returnToOrigin (a round trip's destination is the intermediate scenic
+    stop, chosen by a separate step, not something to force here). Do NOT
+    set this for a vague "ending somewhere warm" style request -- that's
+    the vibe field's job; this is ONLY for a specific named airport/city.
   mode: "list" only if they ask for options/choices/a few ideas, else omit
     (defaults to a single confident pick elsewhere).
   historyMentioned: true ONLY if the request references the pilot's own
@@ -352,6 +360,9 @@ function sanitizeParsed(parsed) {
   }
   if (typeof parsed.multileg === "boolean") out.multileg = parsed.multileg;
   if (Number.isInteger(parsed.legs) && parsed.legs >= 2 && parsed.legs <= 5) out.legs = parsed.legs;
+  if (typeof parsed.finalArr === "string" && /^[A-Za-z]{4}$/.test(parsed.finalArr)) {
+    out.finalArr = parsed.finalArr.toUpperCase();
+  }
   if (parsed.mode === "list" || parsed.mode === "single") out.mode = parsed.mode;
   if (typeof parsed.historyMentioned === "boolean") out.historyMentioned = parsed.historyMentioned;
   if (Array.isArray(parsed.vibe)) {

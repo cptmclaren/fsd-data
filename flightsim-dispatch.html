@@ -2333,27 +2333,38 @@ function pickSoonestRoute(candidates, nowUtc, departInMin) {
   return best;
 }
 
+// Aircraft-family + airline match only (no dep/dur) -- factored out so
+// candidatesFor (forward: given a departure, which routes qualify) and
+// reachableLevels (backward: given a target, which airports can reach it)
+// agree exactly on what counts as a valid hop. They used to diverge (this
+// used to be inlined only in candidatesFor), which would have made
+// reachableLevels an unreliable guide for hop selection.
+function routeMatchesFamily(f, understood) {
+  if (understood.acFamilies && understood.acFamilies.length) {
+    const label = f.acLabel || '';
+    const match = understood.acFamilies.some(fam => {
+      if (fam.startsWith('CEO:')) return label.includes(fam.slice(4)) && !/neo/i.test(label);
+      if (fam.startsWith('NEO:')) return label.includes(fam.slice(4)) && /neo/i.test(label);
+      if (fam.startsWith('747C:')) return label.includes('Boeing 747') && !/747-[48]/.test(label);
+      if (fam.startsWith('747N:')) return label.includes('Boeing 747') && /747-[48]/.test(label);
+      if (fam.startsWith('737R:')) {
+        const digits = fam.slice(5);
+        const m = label.match(/Boeing 737-(\d)\d\d/);
+        return !!m && digits.includes(m[1]);
+      }
+      return label.includes(fam);
+    });
+    if (!match) return false;
+  }
+  if (understood.airline && f.airline !== understood.airline) return false;
+  return true;
+}
+
 function candidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin) {
   const rows = (IDX_DEP.get(depIcao) || []).map(i => DB[i]);
   return rows.filter(f => {
     if (excludeArr && excludeArr.has(f.arr)) return false;
-    if (understood.acFamilies && understood.acFamilies.length) {
-      const label = f.acLabel || '';
-      const match = understood.acFamilies.some(fam => {
-        if (fam.startsWith('CEO:')) return label.includes(fam.slice(4)) && !/neo/i.test(label);
-        if (fam.startsWith('NEO:')) return label.includes(fam.slice(4)) && /neo/i.test(label);
-        if (fam.startsWith('747C:')) return label.includes('Boeing 747') && !/747-[48]/.test(label);
-        if (fam.startsWith('747N:')) return label.includes('Boeing 747') && /747-[48]/.test(label);
-        if (fam.startsWith('737R:')) {
-          const digits = fam.slice(5);
-          const m = label.match(/Boeing 737-(\d)\d\d/);
-          return !!m && digits.includes(m[1]);
-        }
-        return label.includes(fam);
-      });
-      if (!match) return false;
-    }
-    if (understood.airline && f.airline !== understood.airline) return false;
+    if (!routeMatchesFamily(f, understood)) return false;
     // `!= null`, not truthy -- a caller passing an exhausted 0-minute
     // remaining budget must still filter everything out, not be treated
     // as "no cap" the way `0 && …` would.
@@ -2361,6 +2372,32 @@ function candidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin) {
     if (minDurMin != null && f.dur < minDurMin) return false;
     return true;
   });
+}
+
+// For k = 0..maxLegs, the set of airports that can reach `target` in
+// EXACTLY k hops via routes matching the aircraft/airline constraints --
+// pure graph reachability, ignoring timing/duration entirely. Used to
+// steer buildChain's intermediate-hop selection toward a stated final
+// destination (understood.finalArr) instead of picking hops arbitrarily
+// and hoping the last one happens to connect -- without this, "4 leg trip
+// ending at LAX" had no mechanism to ever actually end at LAX; nothing
+// about hop selection had any awareness the trip needed to land there.
+// levels[0] is always just {target}.
+function reachableLevels(target, understood, maxLegs) {
+  const levels = [new Set([target])];
+  for (let k = 1; k <= maxLegs; k++) {
+    const prevLevel = levels[k - 1];
+    const cur = new Set();
+    for (const arr of prevLevel) {
+      const rows = IDX_ARR.get(arr) || [];
+      for (const i of rows) {
+        const f = DB[i];
+        if (routeMatchesFamily(f, understood)) cur.add(f.dep);
+      }
+    }
+    levels.push(cur);
+  }
+  return levels;
 }
 
 // Greedy same-family chain, ground-time buffer between legs. Only the
@@ -2371,6 +2408,88 @@ function candidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin) {
 // context and write a natural reply. `priorIcaos` (default none) is every
 // destination already shown earlier in this conversation, folded into
 // `used` so a fresh request in the same chat doesn't re-suggest one.
+// Bounds the recursive search below so a genuinely impossible combination
+// still fails fast instead of exploring an unbounded search tree.
+const FINAL_ARR_SEARCH_BUDGET = 4000;
+
+// Recursive backtracking search for a `legs`-hop chain from `current` to
+// `finalArr`, respecting the same per-hop constraints candidatesFor
+// already enforces (aircraft/airline, hop duration cap, no revisiting an
+// airport already in `used`) plus the running total-duration budget.
+// reachableLevels alone only proves a path EXISTS, ignoring those extra
+// constraints -- greedily taking the single best-timed candidate at each
+// hop (the first version of this fix) can still walk into a dead end a
+// few hops later even when a different, still-reasonably-timed choice at
+// an earlier hop would have worked. This tries alternatives (best-timed
+// first, so the greedy choice is still attempted first) and backtracks on
+// failure instead of committing to one choice per hop.
+async function findFinalArrChain(current, legs, i, understood, used, nowUtc, departInMin, remainingMin, neededMin, levels, targetUtc, finalArr, budget) {
+  if (budget.count++ > FINAL_ARR_SEARCH_BUDGET) return null;
+  if (remainingMin != null && remainingMin <= 0) return null;
+
+  if (i === legs - 1) {
+    // Destination is already decided -- just find the best-timed direct
+    // route to it. No AI ranking involved; there's no scenic ambiguity
+    // left to resolve once the pilot named an exact airport.
+    const finalCands = candidatesFor(current, understood, new Set(),
+      remainingMin != null ? remainingMin : undefined,
+      neededMin != null ? Math.max(0, neededMin) : undefined)
+      .filter(f => f.arr === finalArr);
+    if (!finalCands.length) return null;
+    const picked = pickBestRoute(finalCands, nowUtc, targetUtc, departInMin);
+    if (!picked) return null;
+    return [{
+      leg: i + 1, f: picked.f, tier: picked.tier,
+      depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: picked.arrivalUtc,
+      reason: '',
+    }];
+  }
+
+  const hopCap = remainingMin != null ? Math.min(240, remainingMin) : 240;
+  let cands = candidatesFor(current, understood, used, hopCap);
+  const nextLevel = levels[legs - i - 1]; // only hops that stay on a path capable of finishing at finalArr in the hops remaining after this one
+  cands = cands.filter(f => nextLevel.has(f.arr));
+  if (!cands.length) return null;
+
+  // One representative (best-timed) route per candidate arrival airport --
+  // trying every near-duplicate row for the same airport (different flight
+  // numbers/days) wouldn't expand the search meaningfully, just the
+  // branching factor. Ranked best-first so backtracking only kicks in once
+  // the greedy-preferred choice actually fails deeper in the search.
+  const byArr = new Map();
+  for (const f of cands) {
+    if (!byArr.has(f.arr)) byArr.set(f.arr, []);
+    byArr.get(f.arr).push(f);
+  }
+  const ranked = [];
+  for (const routes of byArr.values()) {
+    const best = pickBestRoute(routes, nowUtc, null, departInMin);
+    if (best) ranked.push(best);
+  }
+  ranked.sort((a, b) => b.score - a.score);
+
+  for (const cand of ranked) {
+    if (budget.count > FINAL_ARR_SEARCH_BUDGET) return null;
+    const newUsed = new Set(used);
+    newUsed.add(cand.f.arr);
+    const rest = await findFinalArrChain(
+      cand.f.arr, legs, i + 1, understood, newUsed, cand.arrivalUtc, 45,
+      remainingMin != null ? remainingMin - cand.f.dur : null,
+      neededMin != null ? neededMin - cand.f.dur : null,
+      levels, targetUtc, finalArr, budget
+    );
+    if (rest) {
+      return [{
+        leg: i + 1, f: cand.f, tier: cand.tier,
+        depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: cand.arrivalUtc,
+        reason: 'connection',
+      }, ...rest];
+    }
+    // backtrack -- try the next-best arrival airport
+  }
+  return null;
+}
+
 async function buildChain(history, startIcao, understood, legs, priorIcaos) {
   const itinerary = [];
   let current = startIcao;
@@ -2392,6 +2511,23 @@ async function buildChain(history, startIcao, understood, legs, priorIcaos) {
   // connecting hops are free to be short, it's the trip's total that has
   // to clear the floor, not any individual hop.
   let neededMin = understood.minTotalMin != null ? understood.minTotalMin : null;
+
+  // A named final destination ("4 leg trip ending at LAX") gets a wholly
+  // separate, backtracking-search path (see findFinalArrChain above) --
+  // without it, an explicit finalArr was never actually reachable except
+  // by coincidence, since nothing about hop selection had any awareness
+  // the trip needed to end there. reachableLevels proves a path of exactly
+  // this length exists at all before any search/AI call runs, so a
+  // genuinely impossible request fails fast and honestly.
+  const finalArr = understood.finalArr;
+  if (finalArr) {
+    if (finalArr === startIcao) return null; // can't start and end at the same forced airport
+    const levels = reachableLevels(finalArr, understood, legs);
+    if (!levels[legs].has(startIcao)) return null;
+    const chain = await findFinalArrChain(startIcao, legs, 0, understood, used, nowUtc, departInMin, remainingMin, neededMin, levels, targetUtc, finalArr, { count: 0 });
+    if (chain) chain.reply = '';
+    return chain;
+  }
 
   for (let i = 0; i < legs; i++) {
     const isFinal = i === legs - 1;
@@ -2926,7 +3062,19 @@ async function sendChatMessage() {
       }
       if (!rendered.length) throw new Error(reply || 'No destinations matched — try relaxing the request.');
       rendered.forEach(r => chatSuggestedIcaos.add(r.f.arr));
-      finish(historyNote + (reply || 'Here you go.'), { cardsHtml: rendered.map(renderSingleSuggestion).join('') });
+      // Single-pick mode can land on a DIFFERENT destination than the AI's
+      // own top choice (the daylight/timing fallback above walks down the
+      // ranked list past picks[0] if its schedule only lands at night) --
+      // "reply" specifically narrates picks[0] by name, so showing it next
+      // to a card for something else is a real, visible inconsistency, not
+      // just an imprecise fallback message. Use that destination's own
+      // per-icao reason instead, which is always written to match
+      // whatever it actually describes.
+      let replyText = reply || 'Here you go.';
+      if (!isList && picks.length && rendered[0] && rendered[0].f.arr !== picks[0].icao) {
+        replyText = rendered[0].reason || replyText;
+      }
+      finish(historyNote + replyText, { cardsHtml: rendered.map(renderSingleSuggestion).join('') });
     }
   } catch (e) {
     finish(e.message || String(e), { error: true });
