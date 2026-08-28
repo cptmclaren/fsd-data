@@ -177,7 +177,18 @@ whichever of these apply:
     for these words independently of whatever else you set -- don't let
     setting arriveLocal/dep distract you from also checking this.
   departInMin: integer minutes from now until wheels-up, only if a specific
-    lead time is stated ("in an hour" -> 60, "in 30" -> 30).
+    RELATIVE lead time is stated ("in an hour" -> 60, "in 30" -> 30). Do NOT
+    use this for an absolute clock time ("wheels up at 5pm") -- that's
+    departLocal/departUtc below; if both this and one of those would
+    otherwise apply, set only departLocal/departUtc.
+  departLocal: "HH:MM" 24h wall-clock WHEELS-UP time, taken LITERALLY from
+    whatever clock time they said, in THE PILOT'S OWN LOCAL TIME -- exact
+    same rule as arriveLocal above, just for departure instead of arrival
+    ("wheels up at 5pm" -> "17:00", "depart at 4pm central" -> "16:00",
+    "leaving around 9am" -> "09:00"). Same IMPORTANT note as arriveLocal:
+    just copy the HH:MM, do not convert timezones yourself.
+  departUtc: "HH:MM" 24h UTC/Zulu wheels-up time -- same rare-case mirror
+    of departLocal that arriveUtc is of arriveLocal.
   maxTotalMin: integer minutes -- a cap on TOTAL flight/block time for the
     whole trip (sum of each leg's actual flight time, NOT counting
     ground/layover time between legs -- that's how pilots mean "block
@@ -204,8 +215,16 @@ whichever of these apply:
     stop, chosen by a separate step, not something to force here). Do NOT
     set this for a vague "ending somewhere warm" style request -- that's
     the vibe field's job; this is ONLY for a specific named airport/city.
-  mode: "list" only if they ask for options/choices/a few ideas, else omit
-    (defaults to a single confident pick elsewhere).
+  mode: "list" if they ask for options/choices/a few ideas/picks in ANY
+    form, including a specific count ("give me 3 options", "show me some
+    choices", "a couple ideas", "list a few picks") -- a stated number of
+    options is itself list language, not just the word "options" alone.
+    Else omit (defaults to a single confident pick elsewhere).
+  wantCount: integer 1-5, only if they state a specific number of options
+    ("3 options" -> 3, "5 picks" -> 5, "a couple" -> 2, "a few" -> 3, "a
+    handful" -> 4). Always set mode:"list" alongside this -- a specific
+    count IS a request for a list, even without the word "options"/"list"
+    appearing separately.
   historyMentioned: true ONLY if the request references the pilot's own
     past flying (e.g. "places I've never been", "somewhere I rarely fly",
     "haven't visited in a while", "different from my last flight"). This
@@ -343,8 +362,19 @@ function sanitizeParsed(parsed) {
     out.arriveUtc = parsed.arriveUtc;
   }
   if (typeof parsed.returnToOrigin === "boolean") out.returnToOrigin = parsed.returnToOrigin;
-  if (Number.isInteger(parsed.departInMin) && parsed.departInMin >= 0 && parsed.departInMin <= 1440) {
+  // departLocal/departUtc (an absolute clock time) take priority over
+  // departInMin (a relative lead time) when somehow both are present --
+  // the former has a real client-side conversion path (resolveDepartUtc),
+  // the latter is just the AI's own unverifiable estimate.
+  if (typeof parsed.departLocal === "string" && timeRe.test(parsed.departLocal)) {
+    out.departLocal = parsed.departLocal;
+  } else if (typeof parsed.departUtc === "string" && timeRe.test(parsed.departUtc)) {
+    out.departUtc = parsed.departUtc;
+  } else if (Number.isInteger(parsed.departInMin) && parsed.departInMin >= 0 && parsed.departInMin <= 1440) {
     out.departInMin = parsed.departInMin;
+  }
+  if (Number.isInteger(parsed.wantCount) && parsed.wantCount >= 1 && parsed.wantCount <= 5) {
+    out.wantCount = parsed.wantCount;
   }
   if (Number.isInteger(parsed.maxTotalMin) && parsed.maxTotalMin >= 30 && parsed.maxTotalMin <= 4320) {
     out.maxTotalMin = parsed.maxTotalMin;
@@ -364,6 +394,10 @@ function sanitizeParsed(parsed) {
     out.finalArr = parsed.finalArr.toUpperCase();
   }
   if (parsed.mode === "list" || parsed.mode === "single") out.mode = parsed.mode;
+  // wantCount is a stronger signal than mode -- an explicit "3 options"
+  // means list mode even if the model separately (contradictorily) said
+  // mode:"single" for the same turn.
+  if (out.wantCount) out.mode = "list";
   if (typeof parsed.historyMentioned === "boolean") out.historyMentioned = parsed.historyMentioned;
   if (Array.isArray(parsed.vibe)) {
     const vibe = parsed.vibe.filter(v => typeof v === "string" && v.trim()).map(v => v.trim().slice(0, 40)).slice(0, 6);

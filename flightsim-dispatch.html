@@ -2170,6 +2170,45 @@ function resolveTargetUtc(understood) {
   return null;
 }
 
+// Same idea as resolveTargetUtc but for wheels-up. Previously an absolute
+// clock time ("wheels up at 5pm central") had nowhere to go but
+// departInMin -- which the AI can only fill from a STATED relative lead
+// time ("in an hour" -> 60); there was no current-time reference given to
+// it anywhere, so an explicit clock time forced it to silently guess
+// minutes-from-now with no ground truth (confirmed live: a stated "4pm"
+// wheels-up came back departing 3:37pm -- a 23min drift with no stated
+// cause). departLocal/departUtc mirror arriveLocal/arriveUtc exactly --
+// the AI just copies the clock time literally, and local->UTC conversion
+// happens here, client-side, against the visitor's actual browser clock,
+// the same trick that already makes arriveLocal reliable.
+function resolveDepartUtc(understood) {
+  const now = new Date();
+  const rollForward = d => {
+    if (d.getTime() < now.getTime() - 5 * 60000) d.setDate(d.getDate() + 1);
+    return d;
+  };
+  if (understood.departLocal) {
+    const [h, m] = understood.departLocal.split(':').map(Number);
+    return rollForward(new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m));
+  }
+  if (understood.departUtc) {
+    const [h, m] = understood.departUtc.split(':').map(Number);
+    return rollForward(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m)));
+  }
+  return null;
+}
+
+// Single source of truth for "how many minutes from now until wheels-up",
+// used everywhere departInMin used to be read directly. Prefers an
+// absolute clock time (departLocal/departUtc, resolved against real "now"
+// above) over the AI-estimated relative departInMin, since the former has
+// actual ground truth and the latter doesn't -- see resolveDepartUtc.
+function resolveDepartInMin(understood, nowUtc) {
+  const depUtc = resolveDepartUtc(understood);
+  if (depUtc) return Math.max(0, Math.round((depUtc.getTime() - (nowUtc || new Date()).getTime()) / 60000));
+  return understood.departInMin != null ? understood.departInMin : 45;
+}
+
 // `history` is the whole conversation so far (see sendChatMessage) -- lets
 // the model resolve something said several turns ago (departure, aircraft)
 // without it being repeated every message, and ask a clarifying question
@@ -2494,8 +2533,8 @@ async function buildChain(history, startIcao, understood, legs, priorIcaos) {
   const itinerary = [];
   let current = startIcao;
   const used = new Set([startIcao, ...(priorIcaos || [])]);
-  let departInMin = understood.departInMin != null ? understood.departInMin : 45;
   let nowUtc = new Date();
+  let departInMin = resolveDepartInMin(understood, nowUtc);
   const targetUtc = resolveTargetUtc(understood); // only applied to the final leg, below
   // Total flight-only (block) time budget across the whole trip, if the
   // prompt stated one ("under 9 hours") -- counts each leg's actual `dur`,
@@ -2618,8 +2657,8 @@ async function buildRoundTrip(history, startIcao, understood, priorIcaos) {
     const { byDest, list } = destCandidatesFor(startIcao, understood, new Set([startIcao, ...(priorIcaos || [])]), maxTotalMin != null ? maxTotalMin : undefined);
     if (!list.length) return null;
     const { reply, picks } = await callAiRank(history, list, 5);
-    const departInMin = understood.departInMin != null ? understood.departInMin : 45;
     const outNowUtc = new Date();
+    const departInMin = resolveDepartInMin(understood, outNowUtc);
 
     for (const pick of picks) {
       const outRoutes = byDest.get(pick.icao);
@@ -3022,7 +3061,15 @@ async function sendChatMessage() {
     } else {
       const nowUtc = new Date();
       const targetUtc = resolveTargetUtc(understood);
-      const isList = understood.mode === 'list';
+      const departInMin = resolveDepartInMin(understood, nowUtc);
+      // wantCount (an explicit "3 options"/"give me 5 picks") is a much
+      // more reliable list-mode signal than the AI's own `mode` field --
+      // "give me like 3 options" has failed to set mode:"list" in live use
+      // despite being about as explicit as list language gets (same class
+      // of occasional-miss as chatKnownDep compensates for on `dep`), so
+      // an explicit count forces list rendering even if `mode` got missed.
+      const isList = understood.mode === 'list' || !!understood.wantCount;
+      const wantCount = understood.wantCount || 5;
       // Always rank several candidates, even for a single-pick request --
       // same fix as buildChain's final leg: the AI's top pick can have a
       // schedule that only lands at night, and without alternatives to
@@ -3032,15 +3079,15 @@ async function sendChatMessage() {
         understood.minTotalMin != null ? understood.minTotalMin : undefined);
       if (!list.length) throw new Error(`No matching routes departing ${dep}`);
 
-      const { reply, picks } = await callAiRank(chatMessagesForRank(), list, 5, isList);
+      const { reply, picks } = await callAiRank(chatMessagesForRank(), list, wantCount, isList);
       if (!picks.length) throw new Error(reply || 'No destinations matched — try relaxing the request.');
 
       let rendered;
       if (isList) {
-        rendered = picks.slice(0, 5).map(p => {
+        rendered = picks.slice(0, wantCount).map(p => {
           const routes = byDest.get(p.icao);
           if (!routes) return null;
-          const picked = pickBestRoute(routes, nowUtc, targetUtc, understood.departInMin);
+          const picked = pickBestRoute(routes, nowUtc, targetUtc, departInMin);
           if (!picked) return null;
           picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin * 60000);
           picked.reason = p.reason;
@@ -3051,7 +3098,7 @@ async function sendChatMessage() {
         for (const p of picks) {
           const routes = byDest.get(p.icao);
           if (!routes) continue;
-          const picked = pickBestRoute(routes, nowUtc, targetUtc, understood.departInMin);
+          const picked = pickBestRoute(routes, nowUtc, targetUtc, departInMin);
           if (!picked) continue;
           picked.depUtc = new Date(nowUtc.getTime() + picked.departInMin * 60000);
           picked.reason = p.reason;
