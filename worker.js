@@ -8,9 +8,18 @@ var CORS_HEADERS = {
 
 // ── AI prompt-box parsing (new) ──────────────────────────────────────────
 // Same job ai_client.py does for the private FlightRecommender app, hosted
-// here instead so the public site's visitors don't need their own Groq key.
-// The key itself lives only in this Worker's secret store (wrangler secret
-// put GROQ_API_KEY), never in this file, never sent to a client.
+// here instead so the public site's visitors don't need their own key.
+// Keys live only in this Worker's secret store (wrangler secret put
+// GEMINI_API_KEY / GROQ_API_KEY), never in this file, never sent to a client.
+//
+// Two independent providers now, both speaking the same OpenAI-compatible
+// /chat/completions shape (Google's own compat endpoint for Gemini, native
+// for Groq) -- callLLM below tries them in order as one flat list, so an
+// outage or rate limit on one provider falls through to the other, not
+// just to another model on the SAME provider. Gemini first: it's the
+// stronger free-tier model right now (see the deprecation note below for
+// why Groq's original pick got downgraded to a fallback tier).
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // Groq's free-tier token-per-day quota is tracked PER MODEL, not
 // account-wide (confirmed via a real 429: "Rate limit reached for model
@@ -21,20 +30,27 @@ var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // this exact task (e.g. consistently hallucinated mode:"list" on "flying
 // from KDFW, something scenic", a plain single-destination request with
 // no list/options language at all; llama-3.3-70b-versatile got it right
-// every time, verified directly against the same prompt). Both endpoints
-// share the same primary/fallback pair so a quota exhaustion or model
-// retirement degrades the whole pipeline together, not just half of it.
+// every time, verified directly against the same prompt).
 //
 // llama-3.3-70b-versatile itself was retired for free/developer-tier Groq
 // accounts on 2026-08-16 (still fine for enterprise committed-spend
 // accounts, which this isn't) -- calls started failing with HTTP 404
-// "model_not_found". Groq's own migration guidance points free-tier users
-// at openai/gpt-oss-120b as the replacement for the 70b model and
-// openai/gpt-oss-20b for the 8b one, so gpt-oss-120b is now primary here
-// (gpt-oss-20b, the pre-existing fallback, is proven reliable at this
-// task and stays as the fallback). See console.groq.com/docs/deprecations.
-var GROQ_MODELS_PARSE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
-var GROQ_MODELS_RANK = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+// "model_not_found". Groq's own migration guidance pointed free-tier users
+// at openai/gpt-oss-120b/-20b as replacements, which is what's still here
+// as the fallback tier below Gemini.
+//
+// callLLM skips any entry whose env var isn't set (so this still degrades
+// to Groq-only if GEMINI_API_KEY is ever removed, rather than breaking).
+function llmProviders(models) {
+  return [
+    { baseUrl: GEMINI_URL, apiKeyEnv: "GEMINI_API_KEY", model: "gemini-3.7-flash" },
+    { baseUrl: GEMINI_URL, apiKeyEnv: "GEMINI_API_KEY", model: "gemini-3.5-flash" },
+    { baseUrl: GROQ_URL, apiKeyEnv: "GROQ_API_KEY", model: models[0] },
+    { baseUrl: GROQ_URL, apiKeyEnv: "GROQ_API_KEY", model: models[1] },
+  ];
+}
+var PARSE_PROVIDERS = llmProviders(["openai/gpt-oss-120b", "openai/gpt-oss-20b"]);
+var RANK_PROVIDERS = llmProviders(["openai/gpt-oss-120b", "openai/gpt-oss-20b"]);
 // Caps on the conversation history the client can send -- both a real cost
 // control (each turn re-sends the whole history, so an unbounded thread
 // gets expensive fast) and abuse control (this endpoint has no auth beyond
@@ -210,16 +226,23 @@ function corsJson(body, status) {
   });
 }
 
-// Shared low-level Groq call -- both /ai-parse and /ai-rank use this.
-// `models` is tried IN ORDER, advancing to the next one only on a 429
-// (rate/quota limit) -- Groq's free tier tracks quota per model, so a
-// busy day for the first choice doesn't have to mean total failure, just
-// a fallback to a less-preferred model until the primary's quota clears.
-// Any other failure (network, non-429 HTTP error, bad JSON) fails
-// immediately without burning through the fallback list pointlessly.
+// Shared low-level LLM call -- both /ai-parse and /ai-rank use this.
+// `providers` (see llmProviders above) is a flat, ordered list spanning
+// BOTH providers -- e.g. [gemini-3.7, gemini-3.5, groq-120b, groq-20b] --
+// tried in sequence, advancing to the next entry on: 429 (rate/quota),
+// 404 (model retired -- happened for real, see the deprecation note
+// above), 401/403 (bad/missing key for THAT provider specifically -- since
+// providers now have independent keys, this no longer means every entry
+// will fail the same way like it did when everything shared one Groq key),
+// 500/502/503 (upstream having a bad moment -- observed in practice from
+// Gemini as "This model is currently experiencing high demand"), or a
+// 400 specifically carrying "json_validate_failed" (seen in practice as an
+// empty completion from a smaller model, not a problem with what we sent).
+// Any OTHER failure (a genuinely malformed request on our end) fails
+// immediately rather than masking a real bug behind silent fallbacks.
 // Throws Error("request:<detail>") for failures (detail is the upstream
 // status/body so failures are actually diagnosable), Error("parse") if
-// the model's output isn't valid JSON.
+// no provider's output was valid JSON.
 //
 // `messages` is the REAL conversation so far (role:"user"/"assistant"
 // turns, oldest first) -- not a single flattened string. Passing actual
@@ -228,19 +251,25 @@ function corsJson(body, status) {
 // any chat model handles a follow-up. response_format:json_object only
 // constrains the CURRENT completion, so prior assistant turns being plain
 // conversational text (not JSON) is fine.
-async function callGroq(env, models, systemPrompt, messages, maxTokens, temperature) {
+async function callLLM(env, providers, systemPrompt, messages, maxTokens, temperature) {
   let lastErr = null;
-  for (const model of models) {
+  for (const p of providers) {
+    // .trim() defends against a stray trailing newline from however the
+    // secret was set (e.g. `wrangler secret put` via a piped shell value) --
+    // a mangled key produces a genuinely confusing "invalid API key" error
+    // that has nothing to do with the key itself being wrong.
+    const apiKey = (env[p.apiKeyEnv] || "").trim();
+    if (!apiKey) continue; // that provider's key isn't configured here -- skip it, not an error
     let resp;
     try {
-      resp = await fetch(GROQ_URL, {
+      resp = await fetch(p.baseUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env.GROQ_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: model,
+          model: p.model,
           temperature: temperature != null ? temperature : 0,
           max_tokens: maxTokens,
           response_format: { type: "json_object" },
@@ -251,27 +280,21 @@ async function callGroq(env, models, systemPrompt, messages, maxTokens, temperat
         })
       });
     } catch (e) {
-      throw new Error("request:network error contacting Groq");
+      // A network hiccup reaching ONE provider shouldn't sink the whole
+      // request when another, independent provider might still be up.
+      lastErr = new Error(`request:network error contacting ${p.model}`);
+      continue;
     }
     if (!resp.ok) {
       let bodyText = "";
       try { bodyText = (await resp.text()).slice(0, 300); } catch {}
-      // Fall back to the next model on quota exhaustion (429), a model-
-      // side generation failure (400 json_validate_failed -- seen in
-      // practice as an empty completion from the smaller model, not a
-      // problem with what we sent), or the model having been retired
-      // (404 model_not_found -- happened in practice when Groq deprecated
-      // llama-3.3-70b-versatile for free/developer-tier accounts and this
-      // wasn't yet treated as fallback-worthy, so every request hard-failed
-      // instead of quietly dropping to the next model in the list). Any
-      // other failure (genuinely bad request, auth, etc.) fails immediately
-      // instead of wasting the rest of the fallback list on something no
-      // model will fix.
-      if (resp.status === 429 || resp.status === 404 || (resp.status === 400 && bodyText.includes("json_validate_failed"))) {
-        lastErr = new Error(`request:Groq HTTP ${resp.status} (${model}) ${bodyText}`);
+      if (resp.status === 429 || resp.status === 404 || resp.status === 401 || resp.status === 403 ||
+          resp.status === 500 || resp.status === 502 || resp.status === 503 ||
+          (resp.status === 400 && bodyText.includes("json_validate_failed"))) {
+        lastErr = new Error(`request:HTTP ${resp.status} (${p.model}) ${bodyText}`);
         continue;
       }
-      throw new Error(`request:Groq HTTP ${resp.status} ${bodyText}`);
+      throw new Error(`request:HTTP ${resp.status} ${bodyText}`);
     }
     try {
       const payload = await resp.json();
@@ -280,7 +303,7 @@ async function callGroq(env, models, systemPrompt, messages, maxTokens, temperat
       throw new Error("parse");
     }
   }
-  throw lastErr || new Error("request:all models at capacity");
+  throw lastErr || new Error("request:no provider configured or all at capacity");
 }
 
 function sanitizeParsed(parsed) {
@@ -346,7 +369,7 @@ async function withinDailyCap(env) {
 }
 
 async function handleAiParse(request, env) {
-  if (!env.GROQ_API_KEY) {
+  if (!env.GEMINI_API_KEY && !env.GROQ_API_KEY) {
     return corsJson({ error: "AI parsing is not configured" }, 503);
   }
 
@@ -366,14 +389,14 @@ async function handleAiParse(request, env) {
   }
 
   try {
-    // 1000, not 300 -- the primary (non-reasoning) model never needs
-    // anywhere near that for a short JSON object, but the gpt-oss-20b
-    // fallback is a reasoning model that burns tokens on invisible
-    // chain-of-thought before the visible JSON; too tight a cap here
-    // starves it mid-thought and it returns nothing (a real failure seen
-    // in testing, not hypothetical). Raising the ceiling costs nothing
-    // for the primary path since it's billed on tokens actually used.
-    const parsed = await callGroq(env, GROQ_MODELS_PARSE, SYSTEM_PROMPT, history, 2000);
+    // Generous, not tight -- several fallback tiers here (gpt-oss-20b, and
+    // now Gemini 3.x too) are reasoning models that burn tokens on
+    // invisible chain-of-thought before the visible JSON (confirmed
+    // directly against Gemini: a 6-token visible reply still cost ~100
+    // thinking tokens). Too tight a cap starves that mid-thought and it
+    // returns nothing (a real failure seen in testing, not hypothetical).
+    // Raising the ceiling costs nothing on the free tier either way.
+    const parsed = await callLLM(env, PARSE_PROVIDERS, SYSTEM_PROMPT, history, 3000);
     return corsJson({ understood: sanitizeParsed(parsed) });
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
@@ -484,7 +507,7 @@ function sanitizeRankPicks(parsed, validIcaos) {
 }
 
 async function handleAiRank(request, env) {
-  if (!env.GROQ_API_KEY) {
+  if (!env.GEMINI_API_KEY && !env.GROQ_API_KEY) {
     return corsJson({ error: "AI ranking is not configured" }, 503);
   }
 
@@ -531,7 +554,7 @@ async function handleAiRank(request, env) {
 
   try {
     const messages = [...history, { role: "user", content: candidateMsg }];
-    const parsed = await callGroq(env, GROQ_MODELS_RANK, RANK_SYSTEM_PROMPT, messages, 2200, 0.3);
+    const parsed = await callLLM(env, RANK_PROVIDERS, RANK_SYSTEM_PROMPT, messages, 3000, 0.3);
     return corsJson(sanitizeRankPicks(parsed, validIcaos));
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
