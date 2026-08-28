@@ -22,12 +22,19 @@ var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // from KDFW, something scenic", a plain single-destination request with
 // no list/options language at all; llama-3.3-70b-versatile got it right
 // every time, verified directly against the same prompt). Both endpoints
-// now share the same primary (proven reliable for both extraction and
-// geographic reasoning) with the same fallback -- if its daily quota is
-// ever exhausted by real traffic, the whole pipeline degrades together
-// to gpt-oss-20b rather than only half of it silently getting worse.
-var GROQ_MODELS_PARSE = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
-var GROQ_MODELS_RANK = ["llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
+// share the same primary/fallback pair so a quota exhaustion or model
+// retirement degrades the whole pipeline together, not just half of it.
+//
+// llama-3.3-70b-versatile itself was retired for free/developer-tier Groq
+// accounts on 2026-08-16 (still fine for enterprise committed-spend
+// accounts, which this isn't) -- calls started failing with HTTP 404
+// "model_not_found". Groq's own migration guidance points free-tier users
+// at openai/gpt-oss-120b as the replacement for the 70b model and
+// openai/gpt-oss-20b for the 8b one, so gpt-oss-120b is now primary here
+// (gpt-oss-20b, the pre-existing fallback, is proven reliable at this
+// task and stays as the fallback). See console.groq.com/docs/deprecations.
+var GROQ_MODELS_PARSE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+var GROQ_MODELS_RANK = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 var MAX_PROMPT_LEN = 300;
 // A coarse global daily cap, not per-visitor -- cheap (1 KV write/request,
 // well under the free-tier write budget) and enough to stop the endpoint
@@ -181,13 +188,18 @@ async function callGroq(env, models, systemPrompt, userContent, maxTokens, tempe
     if (!resp.ok) {
       let bodyText = "";
       try { bodyText = (await resp.text()).slice(0, 300); } catch {}
-      // Fall back to the next model on quota exhaustion (429) OR a model-
+      // Fall back to the next model on quota exhaustion (429), a model-
       // side generation failure (400 json_validate_failed -- seen in
       // practice as an empty completion from the smaller model, not a
-      // problem with what we sent). Any other failure (genuinely bad
-      // request, auth, etc.) fails immediately instead of wasting the
-      // rest of the fallback list on something no model will fix.
-      if (resp.status === 429 || (resp.status === 400 && bodyText.includes("json_validate_failed"))) {
+      // problem with what we sent), or the model having been retired
+      // (404 model_not_found -- happened in practice when Groq deprecated
+      // llama-3.3-70b-versatile for free/developer-tier accounts and this
+      // wasn't yet treated as fallback-worthy, so every request hard-failed
+      // instead of quietly dropping to the next model in the list). Any
+      // other failure (genuinely bad request, auth, etc.) fails immediately
+      // instead of wasting the rest of the fallback list on something no
+      // model will fix.
+      if (resp.status === 429 || resp.status === 404 || (resp.status === 400 && bodyText.includes("json_validate_failed"))) {
         lastErr = new Error(`request:Groq HTTP ${resp.status} (${model}) ${bodyText}`);
         continue;
       }
