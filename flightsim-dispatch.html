@@ -2757,6 +2757,13 @@ function renderChain(chain) {
 let chatHistory = [];               // [{role:'user'|'assistant', text}]
 let chatSuggestedIcaos = new Set(); // every destination shown so far this conversation -- excluded from later candidate lists so nothing repeats
 let chatBusy = false;
+// Once a departure is resolved from any turn, remembered here as a safety
+// net. /ai-parse re-derives dep from the WHOLE history every single call,
+// which is normally reliable but not guaranteed on every individual
+// request (a weaker fallback model under load, an occasional reasoning
+// miss) -- and re-asking for something the pilot already said earlier in
+// the same conversation reads as the bot forgetting, not as caution.
+let chatKnownDep = null;
 
 function chatMessagesForApi() {
   return chatHistory.map(m => ({ role: m.role, content: m.text }));
@@ -2811,6 +2818,7 @@ function updateChatBubble(node, text, opts) {
 function resetChat() {
   chatHistory = [];
   chatSuggestedIcaos.clear();
+  chatKnownDep = null;
   document.getElementById('chat-thread').innerHTML =
     '<div class="chat-empty-hint" id="chat-empty-hint">Tell me what you want to fly — e.g. "flying from EGLL, something mountainous, 8 to 10 hours" — and refine it as you go.</div>';
   document.getElementById('chat-reset-btn').style.display = 'none';
@@ -2842,14 +2850,21 @@ async function sendChatMessage() {
   try {
     const [understood] = await Promise.all([callAiParse(chatMessagesForApi()), loadHandcraftedScenery()]);
 
-    if (understood.needsClarification) {
+    // needsClarification/a missing dep only actually blocks progress if we
+    // don't ALSO have a departure already confirmed earlier in this same
+    // conversation (chatKnownDep) -- /ai-parse re-derives dep from history
+    // fresh on every call, which is usually reliable but not guaranteed on
+    // any single request, and re-asking for something already established
+    // reads as the bot forgetting rather than being careful.
+    if (understood.needsClarification && !chatKnownDep) {
       finish(understood.clarifyingQuestion || 'Could you say a bit more about what you’re looking for?');
       return;
     }
 
-    const dep = understood.dep || (document.getElementById('dep').value.trim().toUpperCase().split(',')[0] || '');
+    const dep = understood.dep || chatKnownDep || (document.getElementById('dep').value.trim().toUpperCase().split(',')[0] || '');
     if (!dep) throw new Error('Name a departure airport, e.g. "flying from KDFW…"');
     if (!IDX_DEP.has(dep)) throw new Error(`No routes found departing ${dep}`);
+    chatKnownDep = dep; // remembered for the rest of this conversation, see the comment on the declaration
 
     // This tool has no login/flight history for anyone -- say so plainly
     // rather than silently ignoring "places I've never been" style requests.
