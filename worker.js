@@ -16,11 +16,20 @@ var CORS_HEADERS = {
 // /chat/completions shape (Google's own compat endpoint for Gemini, native
 // for Groq) -- callLLM below tries them in order as one flat list, so an
 // outage or rate limit on one provider falls through to the other, not
-// just to another model on the SAME provider. Gemini first: it's the
-// stronger free-tier model right now (see the deprecation note below for
-// why Groq's original pick got downgraded to a fallback tier).
-var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+// just to another model on the SAME provider.
+//
+// Groq is primary despite Gemini 3.x being the stronger model: measured
+// directly, Gemini 3.7/3.5 Flash currently take 17-35+ seconds per call
+// (3.7 also frequently 503s -- "experiencing high demand", consistent
+// with these being brand-new models still ramping serving capacity) vs
+// Groq's 1-3 seconds -- speed is Groq's whole hardware differentiator.
+// For a chat feature, a 20-60+ second combined parse+rank wait per
+// message isn't worth Gemini's extra reasoning quality on every turn, so
+// Gemini is kept configured purely as a fallback tier: normal traffic
+// never touches it, but if Groq's models are ever down or rate-limited
+// the request still completes (slowly) instead of failing outright.
 var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+var GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 // Groq's free-tier token-per-day quota is tracked PER MODEL, not
 // account-wide (confirmed via a real 429: "Rate limit reached for model
 // llama-3.3-70b-versatile ... tokens per day (TPD): Limit 100000"). Heavy
@@ -43,10 +52,10 @@ var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // to Groq-only if GEMINI_API_KEY is ever removed, rather than breaking).
 function llmProviders(models) {
   return [
-    { baseUrl: GEMINI_URL, apiKeyEnv: "GEMINI_API_KEY", model: "gemini-3.7-flash" },
-    { baseUrl: GEMINI_URL, apiKeyEnv: "GEMINI_API_KEY", model: "gemini-3.5-flash" },
     { baseUrl: GROQ_URL, apiKeyEnv: "GROQ_API_KEY", model: models[0] },
     { baseUrl: GROQ_URL, apiKeyEnv: "GROQ_API_KEY", model: models[1] },
+    { baseUrl: GEMINI_URL, apiKeyEnv: "GEMINI_API_KEY", model: "gemini-3.7-flash" },
+    { baseUrl: GEMINI_URL, apiKeyEnv: "GEMINI_API_KEY", model: "gemini-3.5-flash" },
   ];
 }
 var PARSE_PROVIDERS = llmProviders(["openai/gpt-oss-120b", "openai/gpt-oss-20b"]);
