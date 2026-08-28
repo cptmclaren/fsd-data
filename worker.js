@@ -35,7 +35,24 @@ var GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 // task and stays as the fallback). See console.groq.com/docs/deprecations.
 var GROQ_MODELS_PARSE = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
 var GROQ_MODELS_RANK = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"];
-var MAX_PROMPT_LEN = 300;
+// Caps on the conversation history the client can send -- both a real cost
+// control (each turn re-sends the whole history, so an unbounded thread
+// gets expensive fast) and abuse control (this endpoint has no auth beyond
+// the shared site key, so it's the only thing stopping a huge fabricated
+// "history" array from being used as a free-form prompt-stuffing relay).
+var MAX_HISTORY_TURNS = 24;
+var MAX_TURN_LEN = 400;
+
+// Keeps only well-formed {role, content} turns, in order, trimmed to the
+// most recent MAX_HISTORY_TURNS -- used by both /ai-parse and /ai-rank
+// since both now take real conversation history instead of one prompt.
+function sanitizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter(m => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .slice(-MAX_HISTORY_TURNS)
+    .map(m => ({ role: m.role, content: m.content.trim().slice(0, MAX_TURN_LEN) }));
+}
 // A coarse global daily cap, not per-visitor -- cheap (1 KV write/request,
 // well under the free-tier write budget) and enough to stop the endpoint
 // being drained as an open LLM relay unrelated to flight suggestions.
@@ -65,17 +82,39 @@ var AC_FAMILY_TAGS = [
   "Embraer ERJ", "Embraer E1", "Embraer E2", "Fokker"
 ];
 
-var SYSTEM_PROMPT = `You translate a flight-sim pilot's plain-English request for what to
-fly next into a JSON object of route-suggestion parameters. Only include a
-key if the request CLEARLY AND EXPLICITLY implies a value for it. When in
-doubt, omit the key -- an empty object {} is a perfectly good answer for a
-vague request like "something scenic" with nothing else said. Do not infer
-a time, a mode, or anything else just because a request happens to mention
-travel -- every key below needs its own real textual evidence in the
-request, not a guess. Reply with ONLY a JSON object, no prose, no markdown
-fences.
+var SYSTEM_PROMPT = `You are the understanding layer for a flight-sim route-planning chatbot.
+You will be given the full back-and-forth conversation so far (a pilot's
+messages, and your own past replies), not just one isolated message.
+Your job each turn is to output ONE JSON object describing the CURRENT
+best understanding of what they want, resolved across the WHOLE
+conversation -- something said two turns ago (a departure airport, an
+aircraft) still applies unless a later message clearly changes it. A
+later message that refines or contradicts an earlier one (e.g. "actually
+somewhere warmer instead") should win for whatever it touches, leaving
+everything else from earlier turns untouched.
 
-Keys you may set:
+Only include a key if the conversation CLEARLY AND EXPLICITLY implies a
+value for it -- when in doubt, omit the key rather than guess. Do not
+infer a time, a mode, or anything else just because a message happens to
+mention travel -- every key below needs its own real textual evidence
+somewhere in the conversation. Reply with ONLY a JSON object, no prose, no
+markdown fences.
+
+Two keys control the flow before anything else:
+  needsClarification: true ONLY if a departure airport still cannot be
+    determined from the ENTIRE conversation -- that is the one piece of
+    information nothing else here can work without. Every other key is
+    optional and fine to leave unset. When true, set clarifyingQuestion
+    and omit every key below except dep (still include it if you managed
+    to resolve one despite something else being unclear -- that shouldn't
+    happen often, since dep is the only trigger for this).
+  clarifyingQuestion: a short, natural, conversational question to ask
+    back -- ONLY set when needsClarification is true. e.g. "Which airport
+    are you flying out of?" Not a form-field label, an actual question a
+    person would type in a chat.
+
+If needsClarification is not set (i.e. a departure is known), also set
+whichever of these apply:
   dep: departure airport ICAO code (4 letters, uppercase), if named or
     clearly implied by a city name.
   acFamilies: an array using ONLY exact strings from this list (choose zero
@@ -141,7 +180,28 @@ Keys you may set:
     what they have or haven't flown. Setting this lets the UI tell them
     that part of the request was ignored, instead of silently pretending
     to honor it. Do not try to guess or approximate their history -- just
-    flag that they asked for it.`;
+    flag that they asked for it.
+  vibe: an array of short, concrete geographic/character descriptors
+    capturing what kind of place they actually want -- this is what a
+    later step uses to judge candidate destinations, so make it specific
+    and real, not a restatement of generic words like "scenic" or "nice"
+    on their own. Pull the real content out of whatever language they
+    used: "mountainous"/"somewhere with mountains" -> ["mountainous"];
+    "arctic"/"somewhere cold and remote" -> ["arctic","remote"];
+    "tropical island" -> ["tropical","island"]; "desert" -> ["desert"];
+    "fjords"/"norway-like" -> ["fjords"]; "somewhere with a dramatic
+    approach" -> ["dramatic approach"]; "avoid big cities"/"nothing
+    touristy" -> ["avoid major hub cities"]; "somewhere I could actually
+    see mountains landing" -> ["mountainous","dramatic approach"]. A bare
+    "something scenic" with no further description is NOT enough to set
+    this -- leave it unset and let the next step use its own general
+    judgment. If a later message refines an earlier vibe (see the
+    conversation-resolution rule above), the array should reflect the
+    CURRENT intent, not every vibe word ever mentioned -- "actually
+    somewhere warmer" after "mountainous" means drop "mountainous" if it
+    was cold-mountain framing, or keep it if warm mountains still fit
+    (e.g. tropical volcanic islands) -- use real judgment, not literal
+    accumulation.`;
 
 function corsJson(body, status) {
   return new Response(JSON.stringify(body), {
@@ -160,7 +220,15 @@ function corsJson(body, status) {
 // Throws Error("request:<detail>") for failures (detail is the upstream
 // status/body so failures are actually diagnosable), Error("parse") if
 // the model's output isn't valid JSON.
-async function callGroq(env, models, systemPrompt, userContent, maxTokens, temperature) {
+//
+// `messages` is the REAL conversation so far (role:"user"/"assistant"
+// turns, oldest first) -- not a single flattened string. Passing actual
+// multi-turn history is what lets the model resolve "no, somewhere colder"
+// or "not that one" against what was actually said earlier, the same way
+// any chat model handles a follow-up. response_format:json_object only
+// constrains the CURRENT completion, so prior assistant turns being plain
+// conversational text (not JSON) is fine.
+async function callGroq(env, models, systemPrompt, messages, maxTokens, temperature) {
   let lastErr = null;
   for (const model of models) {
     let resp;
@@ -178,7 +246,7 @@ async function callGroq(env, models, systemPrompt, userContent, maxTokens, tempe
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userContent }
+            ...messages
           ]
         })
       });
@@ -254,6 +322,17 @@ function sanitizeParsed(parsed) {
   if (Number.isInteger(parsed.legs) && parsed.legs >= 2 && parsed.legs <= 5) out.legs = parsed.legs;
   if (parsed.mode === "list" || parsed.mode === "single") out.mode = parsed.mode;
   if (typeof parsed.historyMentioned === "boolean") out.historyMentioned = parsed.historyMentioned;
+  if (Array.isArray(parsed.vibe)) {
+    const vibe = parsed.vibe.filter(v => typeof v === "string" && v.trim()).map(v => v.trim().slice(0, 40)).slice(0, 6);
+    if (vibe.length) out.vibe = vibe;
+  }
+  // needsClarification short-circuits the whole rest of the pipeline
+  // client-side (no DB search, no /ai-rank call) -- only dep is kept
+  // alongside it, everything else is dropped since the model was told not
+  // to set them in that case anyway; this just enforces it server-side too.
+  if (parsed.needsClarification === true && typeof parsed.clarifyingQuestion === "string" && parsed.clarifyingQuestion.trim()) {
+    return { needsClarification: true, clarifyingQuestion: parsed.clarifyingQuestion.trim().slice(0, 300), ...(out.dep ? { dep: out.dep } : {}) };
+  }
   return out;
 }
 
@@ -277,10 +356,9 @@ async function handleAiParse(request, env) {
   } catch {
     return corsJson({ error: "invalid JSON body" }, 400);
   }
-  const prompt = (body && body.prompt || "").trim();
-  if (!prompt) return corsJson({ error: "prompt is required" }, 400);
-  if (prompt.length > MAX_PROMPT_LEN) {
-    return corsJson({ error: `prompt too long (max ${MAX_PROMPT_LEN} chars)` }, 400);
+  const history = sanitizeHistory(body && body.history);
+  if (!history.length || history[history.length - 1].role !== "user") {
+    return corsJson({ error: "history must be a non-empty conversation ending in a user message" }, 400);
   }
 
   if (!(await withinDailyCap(env))) {
@@ -295,7 +373,7 @@ async function handleAiParse(request, env) {
     // starves it mid-thought and it returns nothing (a real failure seen
     // in testing, not hypothetical). Raising the ceiling costs nothing
     // for the primary path since it's billed on tokens actually used.
-    const parsed = await callGroq(env, GROQ_MODELS_PARSE, SYSTEM_PROMPT, prompt, 2000);
+    const parsed = await callGroq(env, GROQ_MODELS_PARSE, SYSTEM_PROMPT, history, 2000);
     return corsJson({ understood: sanitizeParsed(parsed) });
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
@@ -323,39 +401,75 @@ async function handleAiParse(request, env) {
 // ones actually likely to be picked.
 var MAX_RANK_CANDIDATES = 60;
 
-var RANK_SYSTEM_PROMPT = `A flight-sim pilot wants a scenic destination suggestion. You will be
-given their request and a list of candidate airports that are actually
-reachable (ICAO, the airport's full name, city, country, and an optional
-curatedTier hint -- "premium"/"deluxe"/"standard" if a flight-sim scenery
-add-on curator rates it, absent if not). The full airport name is there to
-disambiguate same-named cities in different places (e.g. a bare city name
-"Jackson" is ambiguous between Jackson, Mississippi and Jackson Hole,
-Wyoming near the Tetons -- the airport name usually resolves this; use it,
-don't guess from the city name alone). Use your own knowledge of world
-geography -- coastlines,
-mountains, islands, dramatic approaches, iconic skylines -- to judge which
-candidates are genuinely scenic and best match what they asked for. The
-curatedTier hint is a data point, not a rule; you may pick a candidate
-without one, or skip one that has one, if your own geographic judgment says
-otherwise. Only choose ICAOs that appear in the candidate list -- never
-invent one. If few or none of the candidates are meaningfully scenic, return
-fewer picks than asked rather than padding with weak choices.
+var RANK_SYSTEM_PROMPT = `You are the destination-picking half of a flight-sim route-planning
+chatbot. You'll see the real conversation so far (a pilot's messages, and
+your own past replies -- use it: reference it naturally, and if their
+latest message rejects or refines a previous pick, respond to THAT, don't
+just restate the same kind of thing), followed by one final message
+containing the actual candidate airports that are reachable given
+everything already resolved (departure, aircraft, timing) -- ICAO, full
+name, city, country, an optional curatedTier, and an optional connections
+count. Only choose ICAOs from that candidate list -- never invent one.
 
-Reply with ONLY JSON: {"picks":[{"icao":"KXXX","reason":"one short sentence
-grounded in actual geography, not generic phrases like \\"has scenery\\""}]}`;
+GEOGRAPHIC JUDGMENT IS THE WHOLE JOB. Use your own real knowledge of world
+geography -- actual mountain ranges, coastlines, fjords, deserts, islands,
+canyons, glaciers, dramatic approaches -- to judge which candidates
+actually match what's being asked, not just which ones are famous. The
+full airport name disambiguates same-named cities (e.g. bare "Jackson" is
+ambiguous between Jackson, Mississippi and Jackson Hole, Wyoming near the
+Tetons -- use the airport name, don't guess from the city name alone).
+
+If the conversation gives you specific character to match (mountainous,
+arctic, tropical, desert, remote, fjords, etc.), that IS the bar -- a
+candidate only counts as a good pick if it genuinely has that real-world
+character, not just because it's on the list or well-known. If nothing
+specific was asked beyond generic "scenic", fall back to your own judgment
+of genuinely striking natural or dramatic geography.
+
+AVOID GENERIC MAJOR HUBS. Airports like JFK, LAX, ORD, ATL, DFW, IAH, CDG,
+FRA, AMS exist on candidate lists constantly because they're huge and
+well-connected, not because they're worth a special trip to look at from
+the air -- sprawling flat urban development on approach, nothing distinct
+about the geography itself. Don't pick one just because it's there or
+familiar. A high "connections" number on a candidate is a same signal --
+treat a very large connections count as "generic major hub, not
+inherently interesting" unless the actual real-world geography there is
+genuinely exceptional (a big airport CAN still be a great pick if the
+terrain/approach really is dramatic -- e.g. a coastal or mountain-ringed
+big city is fine -- the point is size/fame alone is never the reason,
+real geography is). Likewise curatedTier ("premium"/"deluxe"/"standard")
+means a flight-sim scenery add-on exists for it -- that's usually BECAUSE
+it's a popular real-world hub, so it is not a scenic-quality signal
+either; use it only as a tie-breaker between two candidates you already
+judged equally good on geography, never as a reason to pick something on
+its own.
+
+If few or none of the candidates genuinely fit, return fewer picks than
+asked (even zero) rather than padding with weak choices -- say so plainly
+in "reply" instead.
+
+Reply with ONLY JSON:
+{"reply":"one or two natural, conversational sentences introducing the
+pick(s) -- write like you're actually replying in the chat, not
+captioning a card. Reference the conversation if relevant (e.g.
+acknowledging a refinement).",
+"picks":[{"icao":"KXXX","reason":"one short sentence grounded in actual
+geography, not generic phrases like \\"has scenery\\""}]}`;
 
 function sanitizeRankPicks(parsed, validIcaos) {
-  if (!Array.isArray(parsed.picks)) return [];
-  const seen = new Set();
-  const out = [];
-  for (const p of parsed.picks) {
-    if (!p || typeof p.icao !== "string") continue;
-    const icao = p.icao.toUpperCase();
-    if (!validIcaos.has(icao) || seen.has(icao)) continue;
-    seen.add(icao);
-    out.push({ icao, reason: typeof p.reason === "string" ? p.reason.slice(0, 200) : "" });
+  const picks = [];
+  if (Array.isArray(parsed.picks)) {
+    const seen = new Set();
+    for (const p of parsed.picks) {
+      if (!p || typeof p.icao !== "string") continue;
+      const icao = p.icao.toUpperCase();
+      if (!validIcaos.has(icao) || seen.has(icao)) continue;
+      seen.add(icao);
+      picks.push({ icao, reason: typeof p.reason === "string" ? p.reason.slice(0, 200) : "" });
+    }
   }
-  return out;
+  const reply = typeof parsed.reply === "string" ? parsed.reply.trim().slice(0, 500) : "";
+  return { reply, picks };
 }
 
 async function handleAiRank(request, env) {
@@ -369,12 +483,12 @@ async function handleAiRank(request, env) {
   } catch {
     return corsJson({ error: "invalid JSON body" }, 400);
   }
-  const prompt = (body && body.prompt || "").trim();
+  const history = sanitizeHistory(body && body.history);
   const candidates = Array.isArray(body && body.candidates) ? body.candidates.slice(0, MAX_RANK_CANDIDATES) : [];
   const count = Math.min(Math.max(parseInt(body && body.count) || 1, 1), 5);
   if (!candidates.length) return corsJson({ error: "candidates is required" }, 400);
-  if (prompt.length > MAX_PROMPT_LEN) {
-    return corsJson({ error: `prompt too long (max ${MAX_PROMPT_LEN} chars)` }, 400);
+  if (!history.length || history[history.length - 1].role !== "user") {
+    return corsJson({ error: "history must be a non-empty conversation ending in a user message" }, 400);
   }
 
   if (!(await withinDailyCap(env))) {
@@ -382,18 +496,22 @@ async function handleAiRank(request, env) {
   }
 
   const validIcaos = new Set(candidates.map(c => String(c.icao || "").toUpperCase()));
-  const userContent = JSON.stringify({
-    request: prompt || "something scenic",
+  // Tacked on as one final user turn AFTER the real conversation -- the
+  // model reasons over the actual back-and-forth for tone/context/vibe,
+  // then gets the literal reachable-candidate data to choose from here.
+  const candidateMsg = JSON.stringify({
     wantCount: count,
     candidates: candidates.map(c => ({
       icao: c.icao, name: c.name, city: c.city, country: c.country,
-      ...(c.curatedTier ? { curatedTier: c.curatedTier } : {})
+      ...(c.curatedTier ? { curatedTier: c.curatedTier } : {}),
+      ...(Number.isInteger(c.connections) ? { connections: c.connections } : {})
     })),
   });
 
   try {
-    const parsed = await callGroq(env, GROQ_MODELS_RANK, RANK_SYSTEM_PROMPT, userContent, 2200, 0.3);
-    return corsJson({ picks: sanitizeRankPicks(parsed, validIcaos) });
+    const messages = [...history, { role: "user", content: candidateMsg }];
+    const parsed = await callGroq(env, GROQ_MODELS_RANK, RANK_SYSTEM_PROMPT, messages, 2200, 0.3);
+    return corsJson(sanitizeRankPicks(parsed, validIcaos));
   } catch (e) {
     return corsJson({ error: e.message === "parse" ? "AI returned an unparseable response" : ("AI request failed -- " + e.message.replace(/^request:/, "")) }, 502);
   }
