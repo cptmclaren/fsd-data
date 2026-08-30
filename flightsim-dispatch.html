@@ -277,20 +277,32 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .globe-hint .hint-mouse { display:none; }
   .globe-hint .hint-touch { display:inline; }
 }
-/* Floating route card -- shown over the globe itself on click, so route
-   detail doesn't require looking away to the sidebar's detail-panel
-   (which sits far below the fold when the globe fills the right pane). */
+/* Floating route card -- shown over the globe itself on click, anchored to
+   the actual selected route's position in 3D space rather than a fixed
+   screen position. The globe module re-projects that anchor to screen
+   space every frame (see updateRouteCardPosition/animate) and writes the
+   result as a `transform: translate3d(...)`, so the card visually stays
+   pinned just above the route as the globe rotates/zooms, and disappears
+   when the route rotates onto the far side -- left/top stay 0 always, JS
+   never touches anything but transform + the .show class. */
 .globe-route-card {
-  position:absolute; top:14px; left:50%;
+  position:absolute; left:0; top:0;
   width:min(320px, calc(100% - 24px));
   background:rgba(18,20,24,.92); backdrop-filter:blur(10px);
   border:1px solid var(--border2); border-radius:var(--r2);
   padding:10px 12px; box-shadow:0 16px 40px rgba(0,0,0,.5);
   z-index:3; max-height:calc(100% - 28px); overflow-y:auto;
-  opacity:0; transform:translate(-50%,-10px); pointer-events:none;
-  transition:opacity .15s ease, transform .15s ease;
+  opacity:0; pointer-events:none;
+  transition:opacity .12s ease;
+  will-change:transform;
 }
-.globe-route-card.show { opacity:1; transform:translate(-50%,0); pointer-events:auto; }
+.globe-route-card.show { opacity:1; pointer-events:auto; }
+.globe-route-card::after {
+  content:''; position:absolute; left:50%; bottom:-6px;
+  width:10px; height:10px; background:rgba(18,20,24,.92);
+  border-right:1px solid var(--border2); border-bottom:1px solid var(--border2);
+  transform:translateX(-50%) rotate(45deg); border-radius:0 0 2px 0;
+}
 .globe-route-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; font-size:11px; font-weight:600; color:var(--text2); }
 .globe-route-card-close { cursor:pointer; color:var(--text3); width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:4px; flex-shrink:0; }
 .globe-route-card-close:hover { background:var(--bg3); color:var(--text); }
@@ -1995,8 +2007,13 @@ function closeDetail() {
   document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
   document.getElementById('detail-panel').classList.remove('mobile-sheet-open');
   document.getElementById('mobile-scrim').classList.remove('show');
+  // renderTable() below (when in map view) drives FSD_Globe.update(),
+  // which resets selectedLine to null since getSelRoute() is now null too
+  // -- that's what actually makes updateRouteCardPosition() hide the card
+  // next frame. Clearing the content here too avoids a stale flash of the
+  // old route's detail if anything shows the card again before that sync.
   const card = document.getElementById('globe-route-card');
-  if (card) { card.classList.remove('show'); card.innerHTML = ''; }
+  if (card) card.innerHTML = '';
   renderTable();
 }
 
@@ -2060,6 +2077,11 @@ function showDetail(f) {
   // Also floats over the globe itself (see .globe-route-card) -- harmless
   // to always populate this even outside map view, since its parent pane
   // is opacity:0/pointer-events:none via .view-hidden when not shown.
+  // Only content lives here -- position and the .show/hide timing are
+  // owned entirely by the globe module (see updateRouteCardPosition in
+  // animate()), which re-projects the route's actual 3D position onto the
+  // screen every frame so the card tracks it as the globe rotates, instead
+  // of sitting at one fixed spot regardless of where the route ends up.
   const card = document.getElementById('globe-route-card');
   if (card) {
     card.innerHTML = `
@@ -2069,7 +2091,6 @@ function showDetail(f) {
       </div>
       ${body}
     `;
-    card.classList.add('show');
   }
 }
 
@@ -3693,7 +3714,6 @@ window.addEventListener('resize', positionSortIndicator);
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -3720,7 +3740,7 @@ const MOUSE_CLICK_RADIUS_PX = 12;      // mouse CLICK (handleClick, a single one
 const MIN_DIST = 7, MAX_DIST = 30;
 let targetDistance = 15; // eased-toward camera distance, driven by our own wheel handler
 
-let scene, camera, renderer, controls, routeGroup, airportPoints, clock;
+let scene, camera, renderer, routeGroup, airportPoints, clock;
 let initPromise = null, visible = false;
 let raycaster, arcLines = [], hoveredLine = null, selectedLine = null, pendingHoverCheck = false;
 let pointerDownPos = null;
@@ -4287,29 +4307,34 @@ function init() {
     renderer.setSize(container.clientWidth || 300, container.clientHeight || 300, false);
     resolution.set(renderer.domElement.width, renderer.domElement.height);
 
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enablePan = false;
-    controls.minDistance = MIN_DIST;
-    controls.maxDistance = MAX_DIST;
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    // Built-in wheel zoom applies each wheel event's delta near-instantly — on
-    // trackpads/some mice that fire many events per gesture it feels like a
-    // single scroll snaps the view in. We disable it and drive zoom ourselves
-    // (see onWheel/animate) so it always eases smoothly toward a target.
-    controls.enableZoom = false;
-    // Built-in rotate maps a pixel delta to a FIXED angle regardless of zoom
+    // No OrbitControls (or any other camera-smoothing library) at all --
+    // camera.position is ALWAYS exactly latLonToVec3(camLat, camLon, dist)
+    // (see applyCamLatLon), set directly from live input with no lerp/
+    // damping layer in between. An OrbitControls instance briefly sat here
+    // with pan/zoom/rotate all individually disabled and everything
+    // reimplemented manually below (grab-drag yaw/pitch, wheel/pinch zoom)
+    // -- functionally close to a no-op given every one of its own input
+    // paths was turned off, but it still ran a full update() (spherical
+    // reconversion, damping math) every frame for nothing, and its mere
+    // presence made "is damping fighting our own math" a live question
+    // worth re-asking on every future tuning pass. Removed rather than
+    // convinced-it's-harmless: one system owns the camera now, period.
+    // Built-in-library wheel/rotate/pan would have had the exact problems
+    // the comments below describe, which is why they're custom instead:
+    // wheel zoom applies each event's delta near-instantly (a single
+    // trackpad gesture firing many events reads as one big snap) -- driven
+    // by our own eased target instead (see onWheel/animate). A generic
+    // rotate-drag maps a pixel delta to a FIXED angle regardless of zoom
     // level -- at any given distance the same drag either spins the globe
-    // way too fast (zoomed in) or barely turns it (zoomed out), and it
-    // never tracks the literal point under the cursor the way Google
-    // Earth's "grab the globe" drag does. Disabled in favor of a custom
-    // yaw/pitch grab-drag (see onPointerDown/onPointerMove/applyCamLatLon)
-    // that pans the camera by exactly the amount needed to keep the
-    // grabbed surface point under the cursor at any zoom level, with its
-    // own flick-to-pan momentum on release -- and, being yaw/pitch only
-    // with camera.up permanently world-Y, can never roll the globe the
-    // way a true 3-DOF arcball would on a diagonal drag.
-    controls.enableRotate = false;
+    // way too fast (zoomed in) or barely turns it (zoomed out), and never
+    // tracks the literal point under the cursor the way Google Earth's
+    // "grab the globe" drag does. Our own yaw/pitch grab-drag (see
+    // onPointerDown/onPointerMove/applyCamLatLon) instead pans by exactly
+    // the amount needed to keep the grabbed surface point under the cursor
+    // at any zoom level, with its own flick-to-pan momentum on release --
+    // and, being yaw/pitch only with camera.up permanently world-Y, can
+    // never roll the globe the way a true 3-DOF arcball would on a
+    // diagonal drag.
     targetDistance = camera.position.length();
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
@@ -4357,6 +4382,7 @@ function init() {
     renderer.domElement.addEventListener('touchcancel', onTouchEnd);
     initDrawCanvas();
     loadRegionData(); // fire-and-forget -- populates borders/regions/labels once fetched
+    routeCardEl = document.getElementById('globe-route-card');
 
     const loadingEl = document.getElementById('globe-loading');
     if (loadingEl) loadingEl.style.display = 'none';
@@ -4454,10 +4480,21 @@ function applyCamLatLon() {
 let dragging = false;
 const dragStartCamPos = new THREE.Vector3();
 let dragStartGrabLat = 0, dragStartGrabLon = 0, dragStartCamLat = 0, dragStartCamLon = 0;
-let dragLastLat = 0, dragLastLon = 0, dragLastMoveTime = 0;
 let yawVel = 0, pitchVel = 0; // deg/s, decay after release -- flick-to-pan momentum
 const SPIN_DAMPING = 3.2;     // higher = the flick coasts to a stop sooner
 const SPIN_MIN_SPEED = 0.02;  // deg/s
+
+// Release velocity is computed from a short rolling window of recent
+// (time, lat, lon) samples, not just the last pointermove's own delta.
+// A single final event is noisy -- its own dt can be tiny (event
+// coalescing/irregular polling) or it can simply be a slow deliberate
+// settling motion right before lift-off, either of which used to make the
+// flick either overshoot wildly or barely move at all depending on pure
+// chance of timing. Averaging position change over the last ~100ms instead
+// mirrors how touch/trackpad flick detection is normally done (iOS, Android,
+// Google Maps) and gives consistent, repeatable inertia.
+const VELOCITY_WINDOW_MS = 100;
+let dragSamples = []; // {t, lat, lon}, oldest first, pruned to the window above
 
 function startDrag(clientX, clientY) {
   dragging = true;
@@ -4468,8 +4505,21 @@ function startDrag(clientX, clientY) {
   const grab = dragRayGrabPoint(dragStartCamPos, UP_Y, clientX, clientY);
   const [gLat, gLon] = vec3ToLatLon(grab);
   dragStartGrabLat = gLat; dragStartGrabLon = gLon;
-  dragLastLat = gLat; dragLastLon = gLon;
-  dragLastMoveTime = performance.now();
+  dragSamples = [{ t: performance.now(), lat: gLat, lon: gLon }];
+}
+
+// Reads the rolling window in dragSamples into yawVel/pitchVel -- called
+// once on release (onPointerUp), not per-move, so a drag's continuous
+// pointer movement stays purely 1:1 direct manipulation the whole time it's
+// held (see onPointerMove below); velocity only becomes a concept at all
+// once the pointer actually lifts.
+function finalizeDragVelocity() {
+  if (dragSamples.length < 2) { yawVel = 0; pitchVel = 0; return; }
+  const first = dragSamples[0], last = dragSamples[dragSamples.length - 1];
+  const dt = (last.t - first.t) / 1000;
+  if (dt <= 0.001) return;
+  yawVel = -wrapLonDelta(last.lon - first.lon) / dt;
+  pitchVel = -(last.lat - first.lat) / dt;
 }
 
 function onPointerMove(e) {
@@ -4483,20 +4533,16 @@ function onPointerMove(e) {
     // moves the opposite way the grabbed point moved (verified numerically:
     // matching the lon convention onto lat with a `+` here, instead of `-`,
     // is exactly what made vertical panning feel reversed).
+    // Applied immediately, straight from the live pointer position -- no
+    // easing/lerp of any kind while the pointer is down, so the drag tracks
+    // the cursor with zero added latency. Momentum only begins at release.
     camLon = dragStartCamLon - dLon;
     camLat = Math.max(-POLE_LIMIT, Math.min(POLE_LIMIT, dragStartCamLat - dLat));
     applyCamLatLon();
 
-    // Track angular velocity (this move's incremental lat/lon change over
-    // elapsed time) for release-inertia.
     const now = performance.now();
-    const dt = (now - dragLastMoveTime) / 1000;
-    if (dt > 0.001) {
-      yawVel = -wrapLonDelta(curLon - dragLastLon) / dt;
-      pitchVel = -(curLat - dragLastLat) / dt;
-    }
-    dragLastLat = curLat; dragLastLon = curLon;
-    dragLastMoveTime = now;
+    dragSamples.push({ t: now, lat: curLat, lon: curLon });
+    while (dragSamples.length > 1 && now - dragSamples[0].t > VELOCITY_WINDOW_MS) dragSamples.shift();
   }
 
   // Touch has no real "hover" — pointermove there just means a finger is
@@ -4538,9 +4584,8 @@ function onWheel(e) {
   zoomFocusPoint = delta < 0 ? dragRayGrabPoint(camera.position, camera.up, e.clientX, e.clientY) : null;
 }
 
-// Two-finger pinch zoom. OrbitControls' own touch dolly is tied to the same
-// enableZoom flag as wheel zoom, which we disabled to drive zoom ourselves —
-// so pinch needs its own handling here, applied directly (no inertia) since
+// Two-finger pinch zoom -- its own handling since it's not covered by
+// wheel zoom (onWheel), applied directly (no inertia) since
 // a pinch is direct manipulation and should track the fingers 1:1.
 function touchDist(touches) {
   return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
@@ -4578,6 +4623,7 @@ function onPointerDown(e) {
   }
 }
 function onPointerUp(e) {
+  finalizeDragVelocity();
   dragging = false;
   if (!pointerDownPos) return;
   const dx = e.clientX - pointerDownPos.x, dy = e.clientY - pointerDownPos.y;
@@ -4607,6 +4653,35 @@ const _screenProjVec = new THREE.Vector3();
 function projectToScreen(point, rectW, rectH) {
   _screenProjVec.copy(point).project(camera);
   return { x: (_screenProjVec.x * 0.5 + 0.5) * rectW, y: (-_screenProjVec.y * 0.5 + 0.5) * rectH };
+}
+
+// Keeps .globe-route-card (see showDetail/closeDetail in the outer classic
+// script -- content only, this owns position/visibility) pinned to the
+// actual route it describes as the globe rotates/zooms, instead of sitting
+// at one fixed screen spot regardless of where that route ends up. Anchored
+// to `selectedLine`'s own midpoint -- that variable is already the single
+// source of truth for "which line is selected" (kept in sync with
+// getSelRoute() on every arc rebuild, see update()/clearGroup()), so this
+// needs no selection state of its own to fall out of sync with.
+let routeCardEl = null;
+function updateRouteCardPosition() {
+  if (!routeCardEl) return;
+  if (!selectedLine) { routeCardEl.classList.remove('show'); return; }
+  const hp = selectedLine.userData.hitPoints;
+  const anchor = hp[Math.floor(hp.length / 2)];
+  const camDir = camera.position.clone().normalize(); // sphere is centered at origin
+  if (anchor.dot(camDir) < 0.05) { // rotated onto the far side (or right at the limb, too foreshortened to read) -- hide rather than let it float over open space
+    routeCardEl.classList.remove('show');
+    return;
+  }
+  const rect = renderer.domElement.getBoundingClientRect();
+  const s = projectToScreen(anchor, rect.width, rect.height);
+  // Anchor the card's bottom-center (the little ::after triangle) to the
+  // projected point, with a small gap above it, rather than the card's
+  // own top-left corner -- reads as "pointing at" the route, not just
+  // vaguely near it.
+  routeCardEl.style.transform = `translate3d(${s.x}px, ${s.y}px, 0) translate(-50%, calc(-100% - 14px))`;
+  routeCardEl.classList.add('show');
 }
 function pickLineTouchScreen(clientX, clientY, pixelRadius) {
   const rect = renderer.domElement.getBoundingClientRect();
@@ -4775,11 +4850,10 @@ function animate() {
     }
   }
 
-  // Ease the camera toward targetDistance instead of jumping — OrbitControls
-  // re-derives its internal spherical radius from camera.position at the top
-  // of update(), so nudging position here composes cleanly with its own
-  // rotate/pan damping and still gets clamped to min/maxDistance below.
-  const offset = camera.position.clone().sub(controls.target);
+  // Ease the camera's distance toward targetDistance instead of jumping --
+  // the globe is always centered at the world origin (nothing ever pans
+  // the target), so this is just the camera's own distance from (0,0,0).
+  const offset = camera.position.clone();
   const dist = offset.length();
   if (Math.abs(dist - targetDistance) > 0.001) {
     // Pinch is direct manipulation — track the fingers tightly (little lag).
@@ -4787,10 +4861,10 @@ function animate() {
     const ease = 1 - Math.exp(-(activePinch ? 40 : 12) * dt);
     const eased = dist + (targetDistance - dist) * ease;
     offset.setLength(eased);
-    camera.position.copy(controls.target).add(offset);
+    camera.position.copy(offset);
   }
-  controls.update();
   updateLabelOpacity();
+  updateRouteCardPosition();
   renderer.render(scene, camera);
 }
 
