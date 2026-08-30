@@ -152,28 +152,29 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); font-si
 /* ── MULTI-LEG TRIP: connected timeline, deliberately not the same card
    grid as single suggestions -- one continuous journey, not N unrelated
    options sitting next to each other. ── */
-.trip-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:14px 16px; max-width:420px; }
+.trip-card { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r2); padding:16px 18px; max-width:440px; }
 .trip-head { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:4px; }
-.trip-title { font-weight:700; font-size:14px; color:var(--text); }
-.trip-sub { font-size:11px; color:var(--text3); margin-top:1px; }
-.trip-node { display:flex; gap:12px; padding:10px 0; }
+.trip-head .sg-airline-logo { width:28px; height:28px; }
+.trip-title { font-weight:700; font-size:15px; color:var(--text); }
+.trip-sub { font-size:12px; color:var(--text3); margin-top:2px; }
+.trip-node { display:flex; gap:12px; padding:11px 0; }
 .trip-dot-col { display:flex; flex-direction:column; align-items:center; width:12px; flex-shrink:0; }
-.trip-dot { width:10px; height:10px; border-radius:50%; background:var(--text3); border:2px solid var(--bg3); flex-shrink:0; }
+.trip-dot { width:11px; height:11px; border-radius:50%; background:var(--text3); border:2px solid var(--bg3); flex-shrink:0; }
 .trip-dot.start { background:var(--blue); }
-.trip-dot.final { background:var(--green-bright); width:13px; height:13px; }
+.trip-dot.final { background:var(--green-bright); width:14px; height:14px; }
 .trip-node-body { flex:1; min-width:0; padding-top:-1px; }
-.trip-node-city { font-weight:700; font-size:14.5px; color:var(--text); }
-.trip-node-icao { font-family:var(--mono); font-size:11px; color:var(--accent); font-weight:600; margin-left:5px; }
-.trip-node-time { margin-top:3px; }
-.trip-t-utc { font-family:var(--mono); color:var(--text); font-weight:700; font-size:15px; }
-.trip-t-local { font-family:var(--mono); color:var(--text2); font-size:11.5px; margin-left:8px; }
-.trip-node-through .trip-t-utc { font-size:13px; }
-.trip-node-through .trip-t-local { display:block; margin-left:0; margin-top:1px; color:var(--text3); font-size:10.5px; }
-.trip-node-reason { font-size:11px; color:var(--text2); font-style:italic; margin-top:4px; line-height:1.4; }
+.trip-node-city { font-weight:700; font-size:16px; color:var(--text); }
+.trip-node-icao { font-family:var(--mono); font-size:12.5px; color:var(--accent); font-weight:600; margin-left:5px; }
+.trip-node-time { margin-top:4px; }
+.trip-t-utc { font-family:var(--mono); color:var(--text); font-weight:700; font-size:16px; }
+.trip-t-local { font-family:var(--mono); color:var(--text2); font-size:12.5px; margin-left:8px; }
+.trip-node-through .trip-t-utc { font-size:14px; }
+.trip-node-through .trip-t-local { display:block; margin-left:0; margin-top:2px; color:var(--text3); font-size:11.5px; }
+.trip-node-reason { font-size:12px; color:var(--text2); font-style:italic; margin-top:5px; line-height:1.45; }
 .trip-connector { display:flex; gap:12px; }
 .trip-connector-line-col { width:12px; display:flex; justify-content:center; align-items:center; flex-shrink:0; }
 .trip-connector-arrow { font-size:20px; line-height:1; color:var(--text3); }
-.trip-connector-label { flex:1; font-size:10.5px; color:var(--text3); padding:6px 0; }
+.trip-connector-label { flex:1; font-size:11.5px; color:var(--text3); padding:6px 0; }
 
 /* ── FILTERS ── */
 .filters { padding:10px 12px; overflow-y:auto; flex-shrink:1; min-height:0; max-height:62vh; }
@@ -2362,11 +2363,17 @@ async function callAiParse(history) {
 // comment on fallback candidates), so `showAsOptions` tells the model
 // whether the pilot actually asked for a list or just wants ONE confident
 // recommendation despite several picks coming back in the array.
-async function callAiRank(history, candidates, count, showAsOptions) {
+// `finalRegion` (a multileg trip's stated "must end in <country/region>"
+// constraint, see worker.js's SYSTEM_PROMPT) is enforced server-side as a
+// hard filter against each candidate's own country, using the model's real
+// geographic knowledge -- there's no reliable client-side way to check "is
+// this airport in Europe" against free text like "US"/"the States"/
+// "Europe", so unlike departure/aircraft this can't be a local filter.
+async function callAiRank(history, candidates, count, showAsOptions, finalRegion) {
   const resp = await fetch(FSD_BASE + '/ai-rank', {
     method: 'POST',
     headers: { ...FSD_HEADERS, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ history, candidates, count, showAsOptions: !!showAsOptions }),
+    body: JSON.stringify({ history, candidates, count, showAsOptions: !!showAsOptions, ...(finalRegion ? { finalRegion } : {}) }),
   });
   const data = await resp.json();
   if (!resp.ok) throw new Error(data.error || ('AI ranking failed (' + resp.status + ')'));
@@ -2492,6 +2499,40 @@ function pickSoonestRoute(candidates, nowUtc, departInMin) {
     if (arrivalUtc.getTime() < bestArrival) { bestArrival = arrivalUtc.getTime(); best = { f, tier: sceneryTierRank(f.arr), arrivalUtc, departInMin }; }
   }
   return best;
+}
+
+// Client-side backstop for understood.finalRegion (a multileg trip's
+// stated "must end in <country>" constraint -- see worker.js's
+// SYSTEM_PROMPT/RANK_SYSTEM_PROMPT). The RANK call already asks the AI to
+// hard-filter candidates by country before ranking, and normally does --
+// but a rate-limited fallback to a weaker/different model tier can still
+// occasionally miss it (the same class of thing chatKnownDep and the
+// wantCount->mode:"list" fallback already defend against elsewhere in this
+// file), and a WRONG country slipping through here is worse than a missed
+// list-mode or a forgotten airport, since it's a confidently wrong answer,
+// not just a lesser one. Best-effort, not exhaustive -- only handles
+// free text that's (or maps onto) one specific country; a continent/
+// multi-country region ("Europe") has no reliable single substring check,
+// so this returns null (unknown) rather than false for those, and the
+// caller treats null as "don't reject" -- trusting the AI's own filtering
+// rather than risking a false-negative rejection of a genuinely correct
+// pick just because this table doesn't cover it.
+const REGION_SYNONYMS = {
+  'us':'united states', 'usa':'united states', 'u.s.':'united states', 'u.s.a.':'united states',
+  'united states':'united states', 'america':'united states', 'the states':'united states',
+  'uk':'united kingdom', 'britain':'united kingdom', 'great britain':'united kingdom', 'england':'united kingdom',
+  'canada':'canada', 'mexico':'mexico', 'australia':'australia', 'japan':'japan', 'china':'china',
+  'germany':'germany', 'france':'france', 'italy':'italy', 'spain':'spain', 'brazil':'brazil',
+  'india':'india', 'russia':'russia', 'south africa':'south africa', 'new zealand':'new zealand',
+};
+function regionMatchesCountry(finalRegion, country) {
+  if (!finalRegion || !country) return null;
+  const fr = finalRegion.trim().toLowerCase();
+  const c = country.toLowerCase();
+  const target = REGION_SYNONYMS[fr];
+  if (target) return c.includes(target);
+  if (c.includes(fr) || fr.includes(c)) return true; // a literal/near-literal country name already
+  return null; // unrecognized text (continent, vague region, etc.) -- no safe check, don't reject
 }
 
 // Aircraft-family + airline match only (no dep/dur) -- factored out so
@@ -2732,10 +2773,21 @@ async function buildChain(history, startIcao, understood, legs, priorIcaos) {
       remainingMin != null ? remainingMin : undefined,
       neededMin != null ? Math.max(0, neededMin) : undefined);
     if (!list.length) return null;
-    const { reply, picks } = await callAiRank(history, list, 5);
-    if (!picks.length) return null;
+    const { reply, picks } = await callAiRank(history, list, 5, false, understood.finalRegion);
+    // Zero picks here most often means finalRegion genuinely ruled out
+    // every reachable candidate (see RANK_SYSTEM_PROMPT's hard-filter
+    // instruction) -- surface the AI's own explanation instead of the
+    // generic "no chain found" fallback the caller uses for a bare null.
+    if (!picks.length) throw new Error(reply || 'No destinations matched the requested final region.');
     let picked = null, pickedReason = '';
     for (const pick of picks) {
+      // Backstop -- see regionMatchesCountry's comment -- for the rare case
+      // the AI's own hard-filter (RANK_SYSTEM_PROMPT) misses and lets a
+      // wrong-country pick through anyway.
+      if (understood.finalRegion) {
+        const country = (AP_MAP[pick.icao] || ['', '', ''])[2];
+        if (regionMatchesCountry(understood.finalRegion, country) === false) continue;
+      }
       const routes = byDest.get(pick.icao);
       if (!routes) continue;
       const candidate = pickBestRoute(routes, nowUtc, targetUtc, departInMin);

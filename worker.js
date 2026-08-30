@@ -215,6 +215,19 @@ whichever of these apply:
     stop, chosen by a separate step, not something to force here). Do NOT
     set this for a vague "ending somewhere warm" style request -- that's
     the vibe field's job; this is ONLY for a specific named airport/city.
+  finalRegion: a country or broad geographic region, written as a real
+    recognizable English place name (e.g. "United States", "Europe",
+    "Japan", "South America", "Southeast Asia"), ONLY if the pilot states
+    a country/region (not one specific airport/city -- that's finalArr,
+    and not a vague vibe like "somewhere warm" -- that's the vibe field)
+    that a multileg trip must END in ("ends back in the US" -> "United
+    States", "finishing somewhere in Europe" -> "Europe", "ends up back
+    in Japan" -> "Japan"). A later step matches this against each
+    candidate's real country using its own geographic knowledge, not
+    exact string comparison, so write it as you'd naturally say it, not a
+    code. Only ever set alongside multileg:true, never with
+    returnToOrigin. If the pilot names one specific airport/city instead,
+    set finalArr and omit this.
   mode: "list" if they ask for options/choices/a few ideas/picks in ANY
     form, including a specific count ("give me 3 options", "show me some
     choices", "a couple ideas", "list a few picks") -- a stated number of
@@ -393,6 +406,9 @@ function sanitizeParsed(parsed) {
   if (typeof parsed.finalArr === "string" && /^[A-Za-z]{4}$/.test(parsed.finalArr)) {
     out.finalArr = parsed.finalArr.toUpperCase();
   }
+  if (typeof parsed.finalRegion === "string" && parsed.finalRegion.trim()) {
+    out.finalRegion = parsed.finalRegion.trim().slice(0, 60);
+  }
   if (parsed.mode === "list" || parsed.mode === "single") out.mode = parsed.mode;
   // wantCount is a stronger signal than mode -- an explicit "3 options"
   // means list mode even if the model separately (contradictorily) said
@@ -525,6 +541,17 @@ If few or none of the candidates genuinely fit, return fewer picks than
 asked (even zero) rather than padding with weak choices -- say so plainly
 in "reply" instead.
 
+finalRegion, when present, is a HARD requirement, not a preference: the
+pilot said this multileg trip must end in that country/region. Before any
+scenic judgment, drop every candidate whose "country" field is not
+genuinely within that region (use your own real geography -- e.g.
+finalRegion "United States" excludes anything not one of the 50 states;
+finalRegion "Europe" excludes anything outside Europe). Only THEN apply
+the usual scenic/geographic reasoning to what's left. If literally nothing
+in the candidate list is actually in that region, say so plainly in
+"reply" and return zero picks -- never pick a candidate outside the
+stated region just because it's scenic or nothing else qualifies.
+
 wantCount is how many entries to put in "picks" -- but that's often
 larger than what the pilot will actually see: the app always asks for
 several as internal fallbacks (in case its top choice's schedule lands at
@@ -583,6 +610,11 @@ async function handleAiRank(request, env) {
   // options" -- it would write a reply like "here are five..." even when
   // the app was only ever going to show the single best-timed one.
   const showAsOptions = !!(body && body.showAsOptions);
+  // A country/region a multileg trip's final leg must land in ("ends back
+  // in the US") -- see finalRegion in the parse SYSTEM_PROMPT. Free text,
+  // matched against each candidate's own country field by the model's real
+  // geographic knowledge (see RANK_SYSTEM_PROMPT), not string-compared here.
+  const finalRegion = typeof (body && body.finalRegion) === "string" ? body.finalRegion.trim().slice(0, 60) : "";
   if (!candidates.length) return corsJson({ error: "candidates is required" }, 400);
   if (!history.length || history[history.length - 1].role !== "user") {
     return corsJson({ error: "history must be a non-empty conversation ending in a user message" }, 400);
@@ -599,6 +631,7 @@ async function handleAiRank(request, env) {
   const candidateMsg = JSON.stringify({
     wantCount: count,
     showAsOptions,
+    ...(finalRegion ? { finalRegion } : {}),
     candidates: candidates.map(c => ({
       icao: c.icao, name: c.name, city: c.city, country: c.country,
       ...(c.curatedTier ? { curatedTier: c.curatedTier } : {}),
