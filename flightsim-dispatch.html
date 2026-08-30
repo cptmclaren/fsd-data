@@ -4169,6 +4169,24 @@ let targetDistance = 15; // eased-toward camera distance, driven by our own whee
 
 let scene, camera, renderer, routeGroup, airportPoints, clock;
 let initPromise = null, visible = false;
+// Render-on-demand -- animate() used to call renderer.render() every
+// single frame at the display's refresh rate whenever the map view was
+// open, forever, even with the camera sitting completely idle and
+// nothing on screen changing. A WebGL app pushing a full draw call 60+
+// times a second for no visual reason is real, needless GPU load, which
+// matters here specifically because this app can reasonably be left open
+// in a window alongside something GPU-heavy (a flight sim) -- competing
+// for the same GPU while producing literally zero new pixels. requestRender()
+// is called from every input handler / state change that can actually
+// affect what's on screen; animate() only does its camera-reorientation +
+// render work on a frame where something flagged it (or a short grace
+// window after the last one, as a safety margin for anything not
+// explicitly wired up) -- otherwise it's just the bare rAF re-schedule,
+// no GPU work at all.
+let needsRender = true; // starts true so the very first frame after init/show renders
+let renderGraceFrames = 0;
+const RENDER_GRACE_FRAMES = 3;
+function requestRender() { needsRender = true; }
 let raycaster, arcLines = [], hoveredLine = null, selectedLine = null, pendingHoverCheck = false;
 let pointerDownPos = null;
 let activePinch = false, pinchStartDist = null, pinchStartDistance = null;
@@ -4469,6 +4487,7 @@ async function loadRegionData() {
     for (const rg of regions) regionById.set(rg.id, rg);
 
     buildBorderLines();
+    requestRender(); // borders/labels just appeared -- draw them even if the globe was sitting idle when this fetch resolved
 
     // Smallest-bbox-area first, so a state wins over its own country when
     // both contain a point -- shared by icaoRegion assignment below and by
@@ -4832,6 +4851,7 @@ function onResize() {
   resolution.set(renderer.domElement.width, renderer.domElement.height);
   for (const line of arcLines) line.material.resolution.copy(resolution);
   resizeDrawCanvas();
+  requestRender();
 }
 
 // ── GRAB-DRAG ROTATION (yaw/pitch, no roll) ──
@@ -5173,6 +5193,7 @@ function pickRegionAt(clientX, clientY) {
 }
 
 function applyRegionMeshState(id, hovered, selected) {
+  requestRender();
   if (!hovered && !selected) {
     // Nothing to show -- if a mesh happens to exist (was hovered/selected
     // before), zero it out, but don't force-build one just to hide it.
@@ -5206,11 +5227,13 @@ function handleClick(e, isTouch) {
 // Subtle affordance only — the bold "selected" look is reserved for a click (see setLineSelected).
 function setLineHoverAffordance(line, isHovered) {
   if (line === selectedLine) return; // selection styling takes priority
+  requestRender();
   const ud = line.userData;
   line.material.opacity = isHovered ? Math.min(1, ud.baseOpacity + 0.2) : ud.baseOpacity;
 }
 
 function setLineSelected(line, isSelected) {
+  requestRender();
   const ud = line.userData;
   line.material.color.set(isSelected ? SELECTED_COLOR : ud.baseColor);
   line.material.linewidth = isSelected ? SELECTED_WIDTH : BASE_WIDTH;
@@ -5250,6 +5273,29 @@ function checkHover() {
 function animate() {
   requestAnimationFrame(animate);
   if (!visible) return;
+
+  // "Is anything currently moving on its own" -- momentum, zoom easing/
+  // recenter, an active drag or pinch -- even with zero new input THIS
+  // frame. Combined with needsRender (set by requestRender() from actual
+  // input/state-change handlers -- see its declaration) and a short grace
+  // window after the last active frame (a safety margin for anything not
+  // explicitly wired to requestRender()), this decides whether the frame
+  // does any real work at all. A fully idle globe (nothing moving, no
+  // pending input) does nothing but the bare rAF re-schedule above --
+  // zero GPU cost -- instead of a full render every refresh forever.
+  const distMismatch = Math.abs(camera.position.length() - targetDistance) > 0.001;
+  const physicsActive = dragging || activePinch || Math.abs(zoomVelocity) > 0.0001 ||
+    (!dragging && (Math.abs(yawVel) > SPIN_MIN_SPEED || Math.abs(pitchVel) > SPIN_MIN_SPEED)) ||
+    distMismatch;
+  if (needsRender || physicsActive) {
+    renderGraceFrames = RENDER_GRACE_FRAMES;
+  } else if (renderGraceFrames > 0) {
+    renderGraceFrames--;
+  } else {
+    return;
+  }
+  needsRender = false;
+
   const dt = Math.min(clock.getDelta(), 0.1); // cap dt so a backgrounded-tab gap doesn't jump the view
 
   if (Math.abs(zoomVelocity) > 0.0001) {
@@ -5332,6 +5378,7 @@ function animate() {
 
 function update(rows) {
   if (!routeGroup) return;
+  requestRender();
   clearGroup(routeGroup);
 
   const pairCounts = new Map();
@@ -5420,6 +5467,7 @@ function update(rows) {
 
 function show() {
   visible = true;
+  requestRender();
   onResize();
 }
 function hide() {
@@ -5452,6 +5500,7 @@ function regionOf(icao) {
 function setBordersVisible(v) {
   bordersVisible = v;
   if (borderGroup) borderGroup.visible = v;
+  requestRender();
 }
 
 window.FSD_Globe = { init, update, show, hide, setTool, setSelectedRegions, selectedRegionNames, regionOf, setBordersVisible };
