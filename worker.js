@@ -96,7 +96,8 @@ var AC_FAMILY_TAGS = [
   "CEO:Airbus A320", "NEO:Airbus A320", "CEO:Airbus A321", "NEO:Airbus A321",
   "CEO:Airbus A330", "NEO:Airbus A330", "Airbus A340", "Airbus A350", "Airbus A380",
   "Boeing 707", "Boeing 717", "Boeing 727", "737R:12", "737R:345", "737R:6789",
-  "Boeing 737 MAX", "747C:Boeing 747", "747N:Boeing 747", "Boeing 757", "Boeing 767",
+  "Boeing 737 MAX", "747C:Boeing 747", "747N:Boeing 747",
+  "747:100", "747:200", "747:300", "747:SP", "Boeing 757", "Boeing 767",
   "Boeing 777", "Boeing 787",
   "Douglas DC-8", "Douglas DC-9", "Douglas DC-10", "McDonnell Douglas MD-11",
   "McDonnell Douglas MD-8", "McDonnell Douglas MD-90",
@@ -149,8 +150,18 @@ whichever of these apply:
     ${JSON.stringify(AC_FAMILY_TAGS)}
     Examples: "777"/"772"/"773" -> ["Boeing 777"]; "737"/"738"/"737ng" ->
     ["737R:6789"]; "737max"/"max8"/"max9" -> ["Boeing 737 MAX"];
-    "747"/"742"/"747 classic" -> ["747C:Boeing 747"]; "747-400"/"747-8" ->
-    ["747N:Boeing 747"]; "757" -> ["Boeing 757"]; "767" -> ["Boeing 767"].
+    "747"/"747 classic"/"jumbo" (no specific series number given) ->
+    ["747C:Boeing 747"] (broad -- every classic-era 747: -100/-200/-300/SP);
+    "747-400"/"747-8" -> ["747N:Boeing 747"]; "757" -> ["Boeing 757"];
+    "767" -> ["Boeing 767"]. When a 747 request DOES name specific series
+    numbers, use the narrow "747:100"/"747:200"/"747:300"/"747:SP" tags
+    instead of the broad 747C one, choosing only the ones actually named --
+    "747-100 or 200"/"747-100/200" -> ["747:100","747:200"] (NOT 747C,
+    which would also match -300 and SP that weren't asked for); "747SP" on
+    its own -> ["747:SP"]; "742" ALONE with no other qualifier is loose
+    informal shorthand for "an old-school 747" in general, not the strict
+    ICAO type-designator meaning of specifically -200 -- keep treating a
+    bare "742" as broad 747C, same as unqualified "747".
   airline: 3-letter ICAO airline code, if named or clearly implied
     ("American"/"AA" -> "AAL", "British Airways" -> "BAW", etc.).
   arriveLocal: "HH:MM" 24h wall-clock arrival/deadline time, taken

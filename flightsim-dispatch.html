@@ -2734,14 +2734,35 @@ function regionSeedSet(isInRegion) {
 // agree exactly on what counts as a valid hop. They used to diverge (this
 // used to be inlined only in candidatesFor), which would have made
 // reachableLevels an unreliable guide for hop selection.
+// Real 747 acLabel values in this DB (verified directly): "Boeing 747-100"
+// (SR/Freighter/Combi variants too), "-200"(B/Freighter/Combi), "-300"
+// (SR/Freighter/Combi), "-400"(D/ER/Freighter/Combi), "-800"(i/Freighter),
+// "747 SP", "747 SR" (bare -- no series number recorded), "747 Dreamlifter"
+// (a heavily modified -400 airframe -- was silently falling into "classic"
+// before this check existed, since it has no "747-4" substring at all).
+function is747NewGen(label) {
+  return /747-[48]/.test(label) || /Dreamlifter/i.test(label);
+}
 function routeMatchesFamily(f, understood) {
   if (understood.acFamilies && understood.acFamilies.length) {
     const label = f.acLabel || '';
     const match = understood.acFamilies.some(fam => {
       if (fam.startsWith('CEO:')) return label.includes(fam.slice(4)) && !/neo/i.test(label);
       if (fam.startsWith('NEO:')) return label.includes(fam.slice(4)) && /neo/i.test(label);
-      if (fam.startsWith('747C:')) return label.includes('Boeing 747') && !/747-[48]/.test(label);
-      if (fam.startsWith('747N:')) return label.includes('Boeing 747') && /747-[48]/.test(label);
+      if (fam.startsWith('747C:')) return label.includes('Boeing 747') && !is747NewGen(label);
+      if (fam.startsWith('747N:')) return label.includes('Boeing 747') && is747NewGen(label);
+      // Narrower than 747C/747N -- picked when the pilot named a specific
+      // series ("747-100 or 200"), not just "747"/"747 classic" in
+      // general. A live report showed a 747SP turning up in a chain the
+      // pilot had explicitly scoped to "-100 or -200" -- 747C's broad
+      // match (anything classic-era) was the only option available then,
+      // so it silently included SP (and -300) that were never asked for.
+      if (fam.startsWith('747:')) {
+        if (!label.includes('Boeing 747') || is747NewGen(label)) return false;
+        const variant = fam.slice(4);
+        if (variant === 'SP') return /747\s*SP\b/i.test(label);
+        return label.includes('747-' + variant);
+      }
       if (fam.startsWith('737R:')) {
         const digits = fam.slice(5);
         const m = label.match(/Boeing 737-(\d)\d\d/);
@@ -2950,7 +2971,16 @@ async function findFinalRegionChain(current, legs, i, understood, used, nowUtc, 
       depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: picked.arrivalUtc,
       reason: pickedReason || 'scenic destination',
     }];
-    result.reply = reply; // carried by hand up through the recursion below -- spreading an array into a new one drops its own extra properties
+    // `reply` narrates the AI's own top pick (picks[0]) by name, but the
+    // walk-the-list-for-daylight loop above can settle on a DIFFERENT
+    // candidate (breaks as soon as one clears score>=1, or picks whichever
+    // scored best if none do) -- same reply/card mismatch already fixed
+    // for the single-destination chat path, missed here originally.
+    // Confirmed live: reply said "Kona International Airport" while the
+    // rendered final leg was PANC (Anchorage). Use the actually-picked
+    // destination's own reason instead when they diverge.
+    result.reply = (picked.f.arr !== picks[0].icao) ? (pickedReason || reply) : reply;
+    // carried by hand up through the recursion below -- spreading an array into a new one drops its own extra properties
     return result;
   }
 
