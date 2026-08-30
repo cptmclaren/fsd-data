@@ -277,6 +277,24 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
   .globe-hint .hint-mouse { display:none; }
   .globe-hint .hint-touch { display:inline; }
 }
+/* Floating route card -- shown over the globe itself on click, so route
+   detail doesn't require looking away to the sidebar's detail-panel
+   (which sits far below the fold when the globe fills the right pane). */
+.globe-route-card {
+  position:absolute; top:14px; left:50%;
+  width:min(320px, calc(100% - 24px));
+  background:rgba(18,20,24,.92); backdrop-filter:blur(10px);
+  border:1px solid var(--border2); border-radius:var(--r2);
+  padding:10px 12px; box-shadow:0 16px 40px rgba(0,0,0,.5);
+  z-index:3; max-height:calc(100% - 28px); overflow-y:auto;
+  opacity:0; transform:translate(-50%,-10px); pointer-events:none;
+  transition:opacity .15s ease, transform .15s ease;
+}
+.globe-route-card.show { opacity:1; transform:translate(-50%,0); pointer-events:auto; }
+.globe-route-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; font-size:11px; font-weight:600; color:var(--text2); }
+.globe-route-card-close { cursor:pointer; color:var(--text3); width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:4px; flex-shrink:0; }
+.globe-route-card-close:hover { background:var(--bg3); color:var(--text); }
+.globe-route-card .detail-route, .globe-route-card .dfield { background:var(--bg2); }
 .globe-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--text3); font-size:12px; flex-direction:column; gap:6px; }
 .globe-toolbar { position:absolute; top:10px; right:12px; left:12px; display:flex; justify-content:flex-end; flex-wrap:wrap; gap:4px; z-index:2; }
 .globe-tool-btn { font-family:var(--sans); font-size:11px; font-weight:500; color:var(--text2); background:rgba(20,22,26,.72); backdrop-filter:blur(4px); border:1px solid var(--border2); padding:5px 9px; border-radius:var(--r2); cursor:pointer; display:flex; align-items:center; gap:4px; transition:background .1s,color .1s,border-color .1s; }
@@ -1070,6 +1088,7 @@ input[type=radio], input[type=checkbox] { accent-color:var(--accent); cursor:poi
             <button onclick="clearMapAreaFilter()">Clear</button>
           </div>
           <div class="globe-loading" id="globe-loading"><div>Loading 3D map…</div></div>
+          <div class="globe-route-card" id="globe-route-card"></div>
         </div>
         <div class="suggest-pane view-pane view-hidden" id="suggest-pane">
           <div class="chat-thread" id="chat-thread">
@@ -1976,6 +1995,8 @@ function closeDetail() {
   document.getElementById('detail-panel').innerHTML = '<div class="detail-empty">Select a flight to view route details</div>';
   document.getElementById('detail-panel').classList.remove('mobile-sheet-open');
   document.getElementById('mobile-scrim').classList.remove('show');
+  const card = document.getElementById('globe-route-card');
+  if (card) { card.classList.remove('show'); card.innerHTML = ''; }
   renderTable();
 }
 
@@ -2003,14 +2024,13 @@ function updateMobileFiltersBadge(fi) {
   badge.style.display = active ? '' : 'none';
 }
 
-function showDetail(f) {
+// Shared by the sidebar detail-panel and the floating globe-route-card
+// (see showDetail below) -- same route, two different chrome wrappers
+// around it, not two things to keep in sync separately.
+function detailBodyHtml(f) {
   const depA = AP_MAP[f.dep] || [f.dep,'',''];
   const arrA = AP_MAP[f.arr] || [f.arr,'',''];
-  document.getElementById('detail-panel').innerHTML = `
-    <div class="mobile-sheet-head">
-      <span>Flight Detail</span>
-      <span class="mobile-sheet-close" onclick="closeDetail()"><i class="ti ti-x" aria-hidden="true"></i></span>
-    </div>
+  return `
     <div class="detail-title">${AL_MAP[f.airline]||f.airline} (${f.airline}) · ${f.year} ${f.season==='S'?'Summer':f.season==='W'?'Winter':''}</div>
     <div class="detail-route">
       <div><div class="dr-icao">${f.dep}</div><div class="dr-name">${(depA[0]||'').substring(0,28)}</div><div class="dr-name">${depA[1]||''}</div></div>
@@ -2026,6 +2046,31 @@ function showDetail(f) {
     </div>
     <button class="simbrief-btn" onclick="openSimbrief(selRoute)"><i class="sb-icon ti ti-external-link" aria-hidden="true"></i> Send to Simbrief</button>
   `;
+}
+
+function showDetail(f) {
+  const body = detailBodyHtml(f);
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="mobile-sheet-head">
+      <span>Flight Detail</span>
+      <span class="mobile-sheet-close" onclick="closeDetail()"><i class="ti ti-x" aria-hidden="true"></i></span>
+    </div>
+    ${body}
+  `;
+  // Also floats over the globe itself (see .globe-route-card) -- harmless
+  // to always populate this even outside map view, since its parent pane
+  // is opacity:0/pointer-events:none via .view-hidden when not shown.
+  const card = document.getElementById('globe-route-card');
+  if (card) {
+    card.innerHTML = `
+      <div class="globe-route-card-head">
+        <span>Flight Detail</span>
+        <span class="globe-route-card-close" onclick="closeDetail()"><i class="ti ti-x" aria-hidden="true"></i></span>
+      </div>
+      ${body}
+    `;
+    card.classList.add('show');
+  }
 }
 
 // ── SORT ──
@@ -3664,9 +3709,14 @@ const BASE_WIDTH = 2.2;
 const SELECTED_WIDTH = 5;
 const CLICK_DRAG_THRESHOLD = 5;        // px — mouse: pointer moves beyond this = a rotate drag, not a click
 const CLICK_DRAG_THRESHOLD_TOUCH = 18; // px — a real fingertip jitters a lot more than a mouse click
-const RAYCAST_THRESHOLD = 0.02;        // mouse: Three.js Line2 raycast threshold, tuned for a precise pointer
-const TOUCH_TAP_RADIUS_PX = 26;        // touch: a real screen-space pixel radius (see pickLineTouchScreen) —
+const RAYCAST_THRESHOLD = 0.02;        // mouse HOVER only (checkHover, runs every frame on mousemove) —
+                                        // Three.js Line2 raycast threshold; cheap enough to run continuously
+const TOUCH_TAP_RADIUS_PX = 26;        // touch tap: a real screen-space pixel radius (see pickLineTouchScreen) —
                                         // more predictable to tune than Line2's raycast threshold units
+const MOUSE_CLICK_RADIUS_PX = 12;      // mouse CLICK (handleClick, a single one-off call, so the pricier
+                                        // per-line pixel-distance test is fine here): a thin route line was
+                                        // easy to miss by a few px with the raw Line2 raycast threshold alone --
+                                        // this reuses the same real-pixel hit test touch already gets.
 const MIN_DIST = 7, MAX_DIST = 30;
 let targetDistance = 15; // eased-toward camera distance, driven by our own wheel handler
 
@@ -4539,18 +4589,6 @@ function onPointerUp(e) {
   handleClick(e, wasTouch);
 }
 
-function pickLineAt(clientX, clientY, threshold) {
-  const rect = renderer.domElement.getBoundingClientRect();
-  const ndc = new THREE.Vector2(
-    ((clientX - rect.left) / rect.width) * 2 - 1,
-    -((clientY - rect.top) / rect.height) * 2 + 1
-  );
-  raycaster.setFromCamera(ndc, camera);
-  raycaster.params.Line2 = { threshold };
-  const hits = raycaster.intersectObjects(arcLines, false);
-  return hits.length ? hits[0].object : null;
-}
-
 function distToSegment2D(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
   const lenSq = dx * dx + dy * dy;
@@ -4629,9 +4667,7 @@ function handleClick(e, isTouch) {
     return;
   }
   // tool === 'none' -- draw mode's own overlay canvas intercepts pointer events before they get here
-  const hit = isTouch
-    ? pickLineTouchScreen(e.clientX, e.clientY, TOUCH_TAP_RADIUS_PX)
-    : pickLineAt(e.clientX, e.clientY, RAYCAST_THRESHOLD);
+  const hit = pickLineTouchScreen(e.clientX, e.clientY, isTouch ? TOUCH_TAP_RADIUS_PX : MOUSE_CLICK_RADIUS_PX);
   if (hit) {
     if (typeof window.selectRoute === 'function') window.selectRoute(hit.userData.repFlight);
   } else if (typeof window.closeDetail === 'function') {
