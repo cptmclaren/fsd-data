@@ -2843,8 +2843,21 @@ async function findFinalArrChain(current, legs, i, understood, used, nowUtc, dep
     }];
   }
 
-  const hopCap = remainingMin != null ? Math.min(240, remainingMin) : 240;
-  let cands = candidatesFor(current, understood, used, hopCap);
+  // No domestic-range cap here (unlike buildChain's generic open-ended
+  // loop below, where intermediate hops really should stay short -- that
+  // path is "surprise me with a nice day of hops ending somewhere
+  // scenic"). This is a TARGETED search -- get from here to finalArr in
+  // exactly this many hops -- and a stated aircraft family can be
+  // genuinely long-haul (a 747 chain reaching another continent needs an
+  // intermediate leg that's realistically 8-14 hours, not under 4)．
+  // Capping every intermediate hop at 240min regardless of aircraft type
+  // silently threw those out before the search ever reached the final
+  // leg, even though reachableLevels (which ignores duration on purpose)
+  // had already proven a path existed -- confirmed live: a 2-leg 747-
+  // classic FAOR-to-US request failed with zero AI calls ever made, i.e.
+  // it never even got past this filter. Only the pilot's own stated
+  // total-duration budget (remainingMin, if any) still bounds a hop.
+  let cands = candidatesFor(current, understood, used, remainingMin != null ? remainingMin : undefined);
   const nextLevel = levels[legs - i - 1]; // only hops that stay on a path capable of finishing at finalArr in the hops remaining after this one
   cands = cands.filter(f => nextLevel.has(f.arr));
   if (!cands.length) return null;
@@ -2941,8 +2954,11 @@ async function findFinalRegionChain(current, legs, i, understood, used, nowUtc, 
     return result;
   }
 
-  const hopCap = remainingMin != null ? Math.min(240, remainingMin) : 240;
-  let cands = candidatesFor(current, understood, used, hopCap);
+  // No domestic-range cap -- see the identical comment in findFinalArrChain
+  // above. Same bug, same fix: this is a targeted A-to-region search, not
+  // an open-ended "short hops to somewhere scenic" trip, and a stated
+  // long-haul aircraft family needs intermediate legs to actually be long.
+  let cands = candidatesFor(current, understood, used, remainingMin != null ? remainingMin : undefined);
   const nextLevel = levels[legs - i - 1]; // only hops that stay on a path capable of reaching the region in the hops remaining after this one
   cands = cands.filter(f => nextLevel.has(f.arr));
   if (!cands.length) return null;
