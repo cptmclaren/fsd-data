@@ -2535,6 +2535,199 @@ function regionMatchesCountry(finalRegion, country) {
   return null; // unrecognized text (continent, vague region, etc.) -- no safe check, don't reject
 }
 
+// ── FINAL-REGION REACHABILITY (finalRegion, deterministic) ─────────────
+// regionMatchesCountry above is a per-candidate backstop, not a way to
+// enumerate "every airport in a region" -- it only recognizes ~20 exact
+// country names and returns null (unknown) for anything else, including
+// every continent. That's fine for a spot-check but useless for building
+// a finalArr-style backward reachability graph, which needs the FULL set
+// of matching airports up front. This uses ICAO's own regional prefix
+// allocation (Doc 7910) instead of matching AP_MAP's free-text country
+// field -- every airport already carries this for free in its own ICAO
+// code (first 1-2 letters), so it works immediately for any airport,
+// doesn't depend on AP_MAP's country string being present or a particular
+// spelling, and covers continents/sub-regions naturally via shared tags.
+// Best-effort, not exhaustive -- prioritizes correctness for countries
+// with real commercial aviation history over exact coverage of every
+// micro-territory, same spirit as ICAO_TO_IATA above.
+const ICAO_PREFIX_REGIONS = {
+  // A -- scattered Pacific
+  AG:['solomon islands','oceania'], AN:['nauru','oceania'], AY:['papua new guinea','oceania'],
+  // B -- Iceland / Greenland
+  BI:['iceland','europe'], BG:['greenland','north america'],
+  // D -- Northwest/West Africa (Algeria through Togo)
+  DA:['algeria','africa'], DB:['benin','africa'], DF:['burkina faso','africa'], DG:['ghana','africa'],
+  DI:['ivory coast','africa'], DN:['nigeria','africa'], DR:['niger','africa'], DT:['tunisia','africa'],
+  DX:['togo','africa'],
+  // E -- Northern Europe
+  EB:['belgium','europe'], ED:['germany','europe'], ET:['germany','europe'], EE:['estonia','europe'],
+  EF:['finland','europe'], EG:['united kingdom','europe'], EH:['netherlands','europe'],
+  EI:['ireland','europe'], EK:['denmark','europe'], EL:['luxembourg','europe'], EN:['norway','europe'],
+  EP:['poland','europe'], ES:['sweden','europe'], EV:['latvia','europe'], EY:['lithuania','europe'],
+  // F -- Southern/Central/East Africa + surrounding islands
+  FA:['south africa','africa'], FB:['botswana','africa'], FC:['congo','africa'],
+  FD:['eswatini','swaziland','africa'], FE:['central african republic','africa'],
+  FG:['equatorial guinea','africa'], FH:['saint helena','africa'], FI:['mauritius','africa'],
+  FJ:['british indian ocean territory','africa'], FK:['cameroon','africa'], FL:['zambia','africa'],
+  FM:['madagascar','comoros','africa'], FN:['angola','africa'], FO:['gabon','africa'],
+  FP:['sao tome and principe','africa'], FQ:['mozambique','africa'], FS:['seychelles','africa'],
+  FT:['chad','africa'], FV:['zimbabwe','africa'], FW:['malawi','africa'], FX:['lesotho','africa'],
+  FY:['namibia','africa'], FZ:['democratic republic of the congo','congo','africa'],
+  // G -- far Northwest Africa
+  GA:['mali','africa'], GB:['gambia','africa'], GC:['spain','europe'], GE:['spain','europe'],
+  GF:['sierra leone','africa'], GG:['guinea-bissau','africa'], GL:['liberia','africa'],
+  GM:['morocco','africa'], GO:['senegal','africa'], GQ:['mauritania','africa'], GU:['guinea','africa'],
+  GV:['cape verde','africa'],
+  // H -- Northeast Africa
+  HA:['ethiopia','africa'], HB:['burundi','africa'], HC:['somalia','africa'], HD:['djibouti','africa'],
+  HE:['egypt','africa'], HH:['eritrea','africa'], HK:['kenya','africa'], HL:['libya','africa'],
+  HR:['rwanda','africa'], HS:['sudan','africa'], HT:['tanzania','africa'], HU:['uganda','africa'],
+  // L -- Southern/Western Europe, Mediterranean, transcontinental fringe
+  LA:['albania','europe'], LB:['bulgaria','europe'], LC:['cyprus','europe'], LD:['croatia','europe'],
+  LE:['spain','europe'], LF:['france','europe'], LG:['greece','europe'], LH:['hungary','europe'],
+  LI:['italy','europe'], LJ:['slovenia','europe'], LK:['czech republic','europe'],
+  LL:['israel','middle east','asia'], LM:['malta','europe'], LN:['monaco','europe'],
+  LO:['austria','europe'], LP:['portugal','europe'], LQ:['bosnia and herzegovina','europe'],
+  LR:['romania','europe'], LS:['switzerland','europe'], LT:['turkey','europe','middle east'],
+  LU:['moldova','europe'], LV:['palestine','middle east','asia'], LW:['north macedonia','europe'],
+  LX:['united kingdom','europe'], LY:['serbia','europe'], LZ:['slovakia','europe'],
+  // M -- Mexico, Central America, western Caribbean
+  MB:['turks and caicos islands','caribbean'], MD:['dominican republic','caribbean'],
+  MG:['guatemala','north america'], MH:['honduras','north america'], MK:['jamaica','caribbean'],
+  MM:['mexico','north america'], MN:['nicaragua','north america'], MP:['panama','north america'],
+  MR:['costa rica','north america'], MS:['el salvador','north america'], MT:['haiti','caribbean'],
+  MU:['cuba','caribbean'], MW:['cayman islands','caribbean'], MY:['bahamas','caribbean'],
+  MZ:['belize','north america'],
+  // N -- South Pacific / New Zealand
+  NC:['cook islands','oceania'], NF:['fiji','tonga','oceania'], NG:['kiribati','tuvalu','oceania'],
+  NI:['niue','oceania'], NL:['wallis and futuna','oceania'], NS:['samoa','oceania'],
+  NT:['french polynesia','oceania'], NV:['vanuatu','oceania'], NW:['new caledonia','oceania'],
+  NZ:['new zealand','oceania'],
+  // O -- Middle East / Southwest Asia
+  OA:['afghanistan','asia'], OB:['bahrain','middle east','asia'], OE:['saudi arabia','middle east','asia'],
+  OI:['iran','middle east','asia'], OJ:['jordan','middle east','asia'], OK:['kuwait','middle east','asia'],
+  OL:['lebanon','middle east','asia'], OM:['united arab emirates','middle east','asia'],
+  OO:['oman','middle east','asia'], OP:['pakistan','asia','south asia'],
+  OR:['iraq','middle east','asia'], OS:['syria','middle east','asia'], OT:['qatar','middle east','asia'],
+  OY:['yemen','middle east','asia'],
+  // P -- mostly USA Pacific territories + a few independent island nations
+  PA:['united states','north america'], PB:['united states','north america'],
+  PF:['united states','north america'], PO:['united states','north america'],
+  PC:['kiribati','oceania'], PG:['united states','oceania'], PH:['united states','north america'],
+  PJ:['united states','oceania'], PK:['marshall islands','oceania'], PL:['kiribati','oceania'],
+  PM:['united states','oceania'], PT:['micronesia','palau','oceania'], PW:['united states','oceania'],
+  // R -- East Asia
+  RC:['taiwan','asia'], RJ:['japan','asia'], RO:['japan','asia'], RK:['south korea','asia'],
+  RP:['philippines','asia','southeast asia'],
+  // S -- South America
+  SA:['argentina','south america'], SB:['brazil','south america'], SC:['chile','south america'],
+  SD:['brazil','south america'], SE:['ecuador','south america'], SF:['falkland islands','south america'],
+  SG:['paraguay','south america'], SI:['brazil','south america'], SJ:['brazil','south america'],
+  SK:['colombia','south america'], SL:['bolivia','south america'], SM:['suriname','south america'],
+  SN:['brazil','south america'], SO:['french guiana','south america'], SP:['peru','south america'],
+  SS:['brazil','south america'], SU:['uruguay','south america'], SV:['venezuela','south america'],
+  SW:['brazil','south america'], SY:['guyana','south america'],
+  // T -- Eastern Caribbean
+  TA:['antigua and barbuda','caribbean'], TB:['barbados','caribbean'], TD:['dominica','caribbean'],
+  TF:['france','caribbean'], TG:['grenada','caribbean'], TI:['united states','caribbean'],
+  TJ:['united states','caribbean'], TK:['saint kitts and nevis','caribbean'],
+  TL:['saint lucia','caribbean'], TN:['netherlands','caribbean'], TQ:['united kingdom','caribbean'],
+  TR:['united kingdom','caribbean'], TT:['trinidad and tobago','caribbean'],
+  TU:['united kingdom','caribbean'], TV:['saint vincent and the grenadines','caribbean'],
+  TX:['united kingdom','caribbean'],
+  // U -- Russia + former Soviet states
+  UA:['kazakhstan','asia'], UB:['azerbaijan','asia'], UD:['armenia','asia'], UG:['georgia','asia'],
+  UK:['ukraine','europe'], UM:['belarus','europe'],
+  UT:['uzbekistan','tajikistan','turkmenistan','asia'],
+  UU:['russia','europe','asia'], UL:['russia','europe','asia'], UN:['russia','europe','asia'],
+  UO:['russia','europe','asia'], UH:['russia','europe','asia'], UI:['russia','europe','asia'],
+  UE:['russia','europe','asia'], UW:['russia','europe','asia'],
+  // V -- South Asia + mainland Southeast Asia
+  VA:['india','asia','south asia'], VE:['india','asia','south asia'], VI:['india','asia','south asia'],
+  VO:['india','asia','south asia'], VC:['sri lanka','asia','south asia'], VD:['cambodia','asia','southeast asia'],
+  VG:['bangladesh','asia','south asia'], VH:['china','asia'], VL:['laos','asia','southeast asia'],
+  VM:['china','asia'], VN:['nepal','asia','south asia'], VR:['maldives','asia','south asia'],
+  VT:['thailand','asia','southeast asia'], VV:['vietnam','asia','southeast asia'],
+  VY:['myanmar','asia','southeast asia'],
+  // W -- maritime Southeast Asia
+  WA:['indonesia','asia','southeast asia'], WI:['indonesia','asia','southeast asia'],
+  WQ:['indonesia','asia','southeast asia'], WR:['indonesia','asia','southeast asia'],
+  WB:['malaysia','brunei','asia','southeast asia'], WM:['malaysia','asia','southeast asia'],
+  WP:['east timor','asia','southeast asia'], WS:['singapore','asia','southeast asia'],
+};
+// K/C/Y/Z are ICAO's single-letter-prefix countries (the ENTIRE letter is
+// that one country -- unlike everywhere else, which shares its first
+// letter across many countries), except Z's two carve-outs.
+function icaoRegionTags(icao) {
+  if (!icao || icao.length < 2) return null;
+  const c1 = icao[0];
+  if (c1 === 'K') return ['united states','north america'];
+  if (c1 === 'C') return ['canada','north america'];
+  if (c1 === 'Y') return ['australia','oceania'];
+  const p2 = icao.slice(0, 2);
+  if (p2 === 'ZK') return ['north korea','asia'];
+  if (p2 === 'ZM') return ['mongolia','asia'];
+  if (c1 === 'Z') return ['china','asia'];
+  return ICAO_PREFIX_REGIONS[p2] || null;
+}
+
+// Maps whatever free-text finalRegion the AI wrote (see worker.js's
+// SYSTEM_PROMPT -- "a real recognizable English place name") onto one of
+// the tags used in ICAO_PREFIX_REGIONS above. Most single countries need
+// no entry here at all -- their plain English name already IS their tag
+// verbatim ("Kenya" -> 'kenya', "Japan" -> 'japan') and falls through to
+// the raw-normalized-text branch below; this table only covers the common
+// alternate phrasings (US/USA/America) and every continent/sub-region,
+// which have no single "natural" tag to fall back to automatically.
+const REGION_TEXT_SYNONYMS = {
+  'us':'united states', 'usa':'united states', 'u.s.':'united states', 'u.s.a.':'united states',
+  'united states':'united states', 'america':'united states', 'the states':'united states',
+  'uk':'united kingdom', 'britain':'united kingdom', 'great britain':'united kingdom', 'england':'united kingdom',
+  'uae':'united arab emirates', 'emirates':'united arab emirates', 'holland':'netherlands',
+  'korea':'south korea',
+  'north america':'north america', 'south america':'south america', 'latin america':'south america',
+  'europe':'europe', 'africa':'africa', 'asia':'asia', 'oceania':'oceania',
+  'australia and oceania':'oceania', 'the pacific':'oceania',
+  'middle east':'middle east', 'caribbean':'caribbean',
+  'southeast asia':'southeast asia', 'south east asia':'southeast asia',
+  'south asia':'south asia', 'the subcontinent':'south asia', 'indian subcontinent':'south asia',
+  'scandinavia':'europe', 'nordics':'europe', 'the nordics':'europe',
+};
+function normalizeRegionText(s) {
+  return s.trim().toLowerCase().replace(/^the\s+/, '').replace(/\s+/g, ' ');
+}
+// Returns a `(icao) => boolean` predicate for understood.finalRegion, or
+// null if the text doesn't resolve to any known tag at all (truly vague
+// text somehow past worker.js's own instruction to write a real place
+// name) -- callers treat null as "can't determine reachability, fall back
+// to the non-region-aware path" rather than silently matching nothing.
+function finalRegionPredicate(finalRegion) {
+  if (!finalRegion) return null;
+  const norm = normalizeRegionText(finalRegion);
+  const tag = REGION_TEXT_SYNONYMS[norm] || norm;
+  const known = tag === norm
+    ? Object.values(ICAO_PREFIX_REGIONS).some(tags => tags.includes(tag)) ||
+      ['united states','canada','australia','china','north korea','mongolia'].includes(tag)
+    : true; // came from the synonym table -- always a real tag used above
+  if (!known) return null;
+  return icao => {
+    const tags = icaoRegionTags(icao);
+    return !!tags && tags.includes(tag);
+  };
+}
+// Enumerates every known airport matching a finalRegionPredicate -- the
+// seed set (level 0) for reachableLevels below, mirroring how a single
+// named finalArr seeds it with just {finalArr}. Could be large (thousands
+// of airports for "United States") -- fine, it's just a Set membership
+// table, not iterated per-candidate anywhere hot.
+function regionSeedSet(isInRegion) {
+  const seeds = new Set();
+  for (const icao of Object.keys(AP_MAP)) {
+    if (isInRegion(icao)) seeds.add(icao);
+  }
+  return seeds;
+}
+
 // Aircraft-family + airline match only (no dep/dur) -- factored out so
 // candidatesFor (forward: given a departure, which routes qualify) and
 // reachableLevels (backward: given a target, which airports can reach it)
@@ -2576,17 +2769,20 @@ function candidatesFor(depIcao, understood, excludeArr, maxDurMin, minDurMin) {
   });
 }
 
-// For k = 0..maxLegs, the set of airports that can reach `target` in
+// For k = 0..maxLegs, the set of airports that can reach the target in
 // EXACTLY k hops via routes matching the aircraft/airline constraints --
 // pure graph reachability, ignoring timing/duration entirely. Used to
 // steer buildChain's intermediate-hop selection toward a stated final
-// destination (understood.finalArr) instead of picking hops arbitrarily
+// destination (understood.finalArr, or every airport in understood.
+// finalRegion -- see regionSeedSet) instead of picking hops arbitrarily
 // and hoping the last one happens to connect -- without this, "4 leg trip
 // ending at LAX" had no mechanism to ever actually end at LAX; nothing
 // about hop selection had any awareness the trip needed to land there.
+// `target` is either one ICAO (finalArr) or a whole Set of them
+// (finalRegion, from regionSeedSet) -- levels[0] is that seed, as-is.
 // levels[0] is always just {target}.
 function reachableLevels(target, understood, maxLegs) {
-  const levels = [new Set([target])];
+  const levels = [target instanceof Set ? new Set(target) : new Set([target])];
   for (let k = 1; k <= maxLegs; k++) {
     const prevLevel = levels[k - 1];
     const cur = new Set();
@@ -2692,6 +2888,101 @@ async function findFinalArrChain(current, legs, i, understood, used, nowUtc, dep
   return null;
 }
 
+// Same backtracking structure as findFinalArrChain, but the destination
+// isn't one fixed airport -- it's "any airport isInRegion accepts" -- so
+// the leaf step (i === legs-1) can't just look up a single direct route;
+// it gathers every in-region destination directly reachable from
+// `current`, already guaranteed region-valid by construction (not by
+// asking the AI to also self-filter -- live testing showed the AI's own
+// RANK_SYSTEM_PROMPT hard-filter instruction is NOT reliably followed on
+// its own), and only THEN asks the AI to judge which is most scenic among
+// those. `aiBudget` caps how many AI-rank calls one whole search can make
+// across every backtracking attempt at this leaf -- unlike the rest of
+// the search (cheap, local, bounded by FINAL_ARR_SEARCH_BUDGET), each
+// leaf attempt costs a real network round-trip, so it needs its own much
+// smaller cap rather than sharing budget.count.
+const FINAL_REGION_AI_BUDGET = 4;
+async function findFinalRegionChain(current, legs, i, understood, used, nowUtc, departInMin, remainingMin, neededMin, levels, targetUtc, isInRegion, history, budget, aiBudget) {
+  if (budget.count++ > FINAL_ARR_SEARCH_BUDGET) return null;
+  if (remainingMin != null && remainingMin <= 0) return null;
+
+  if (i === legs - 1) {
+    if (aiBudget.count >= FINAL_REGION_AI_BUDGET) return null;
+    const finalCands = candidatesFor(current, understood, new Set(),
+      remainingMin != null ? remainingMin : undefined,
+      neededMin != null ? Math.max(0, neededMin) : undefined)
+      .filter(f => isInRegion(f.arr));
+    if (!finalCands.length) return null; // backtrack -- this second-to-last hop has no in-region onward connection at all
+    const byDest = new Map();
+    for (const f of finalCands) {
+      if (!byDest.has(f.arr)) byDest.set(f.arr, []);
+      byDest.get(f.arr).push(f);
+    }
+    const list = shuffleInPlace([...byDest.keys()]).map(destInfo);
+    aiBudget.count++;
+    const { reply, picks } = await callAiRank(history, list, 5, false, understood.finalRegion);
+    if (!picks.length) return null; // backtrack -- try a different second-to-last hop rather than failing the whole search on one AI "nothing fits" verdict
+    let picked = null, pickedReason = '';
+    for (const pick of picks) {
+      const routes = byDest.get(pick.icao);
+      if (!routes) continue;
+      const candidate = pickBestRoute(routes, nowUtc, targetUtc, departInMin);
+      if (!candidate) continue;
+      if (!picked || candidate.score > picked.score) { picked = candidate; pickedReason = pick.reason; }
+      if (!targetUtc && candidate.score >= 1) break;
+    }
+    if (!picked) return null;
+    const result = [{
+      leg: i + 1, f: picked.f, tier: picked.tier,
+      depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: picked.arrivalUtc,
+      reason: pickedReason || 'scenic destination',
+    }];
+    result.reply = reply; // carried by hand up through the recursion below -- spreading an array into a new one drops its own extra properties
+    return result;
+  }
+
+  const hopCap = remainingMin != null ? Math.min(240, remainingMin) : 240;
+  let cands = candidatesFor(current, understood, used, hopCap);
+  const nextLevel = levels[legs - i - 1]; // only hops that stay on a path capable of reaching the region in the hops remaining after this one
+  cands = cands.filter(f => nextLevel.has(f.arr));
+  if (!cands.length) return null;
+
+  const byArr = new Map();
+  for (const f of cands) {
+    if (!byArr.has(f.arr)) byArr.set(f.arr, []);
+    byArr.get(f.arr).push(f);
+  }
+  const ranked = [];
+  for (const routes of byArr.values()) {
+    const best = pickBestRoute(routes, nowUtc, null, departInMin);
+    if (best) ranked.push(best);
+  }
+  ranked.sort((a, b) => b.score - a.score);
+
+  for (const cand of ranked) {
+    if (budget.count > FINAL_ARR_SEARCH_BUDGET) return null;
+    const newUsed = new Set(used);
+    newUsed.add(cand.f.arr);
+    const rest = await findFinalRegionChain(
+      cand.f.arr, legs, i + 1, understood, newUsed, cand.arrivalUtc, 45,
+      remainingMin != null ? remainingMin - cand.f.dur : null,
+      neededMin != null ? neededMin - cand.f.dur : null,
+      levels, targetUtc, isInRegion, history, budget, aiBudget
+    );
+    if (rest) {
+      const full = [{
+        leg: i + 1, f: cand.f, tier: cand.tier,
+        depUtc: new Date(nowUtc.getTime() + departInMin * 60000), arrUtc: cand.arrivalUtc,
+        reason: 'connection',
+      }, ...rest];
+      full.reply = rest.reply;
+      return full;
+    }
+    // backtrack -- try the next-best arrival airport
+  }
+  return null;
+}
+
 async function buildChain(history, startIcao, understood, legs, priorIcaos) {
   const itinerary = [];
   let current = startIcao;
@@ -2729,6 +3020,34 @@ async function buildChain(history, startIcao, understood, legs, priorIcaos) {
     const chain = await findFinalArrChain(startIcao, legs, 0, understood, used, nowUtc, departInMin, remainingMin, neededMin, levels, targetUtc, finalArr, { count: 0 });
     if (chain) chain.reply = '';
     return chain;
+  }
+
+  // A country/region final destination ("ends back in the US") gets the
+  // same backward-reachability + backtracking treatment as finalArr above
+  // -- without it, intermediate hops were picked by simple soonest-timing
+  // with zero awareness of the region goal, so a request could fail (or
+  // worse, silently land somewhere outside the region -- see
+  // regionMatchesCountry's own comment on a live report of exactly that)
+  // even when a real path existed, just not through the hops greedy
+  // timing happened to wander into. finalArr takes priority above when
+  // both are somehow set (worker.js's SYSTEM_PROMPT already tells the AI
+  // to prefer finalArr and omit this when a specific airport is named).
+  if (understood.finalRegion) {
+    const isInRegion = finalRegionPredicate(understood.finalRegion);
+    if (isInRegion) {
+      const seeds = regionSeedSet(isInRegion);
+      if (seeds.size) {
+        const levels = reachableLevels(seeds, understood, legs);
+        if (levels[legs].has(startIcao)) {
+          return await findFinalRegionChain(startIcao, legs, 0, understood, used, nowUtc, departInMin, remainingMin, neededMin, levels, targetUtc, isInRegion, history, { count: 0 }, { count: 0 });
+        }
+      }
+      return null; // finalRegion resolved but genuinely unreachable in this many hops (or matched zero known airports at all)
+    }
+    // isInRegion === null: finalRegion's text didn't resolve to any known
+    // country/continent tag -- fall through to the generic loop below,
+    // which still applies the RANK hard-filter + regionMatchesCountry
+    // backstop as a best-effort fallback rather than failing outright.
   }
 
   for (let i = 0; i < legs; i++) {
