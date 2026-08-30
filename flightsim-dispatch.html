@@ -4475,6 +4475,22 @@ function applyCamLatLon() {
   const dist = camera.position.length();
   camera.position.copy(latLonToVec3(camLat, camLon, dist));
   camera.up.set(0, 1, 0);
+  // Setting .up alone does NOT reorient the camera -- Three.js only reads
+  // it as an input to lookAt()'s own rotation-matrix construction. This
+  // was silently relying on OrbitControls.update()'s own internal lookAt()
+  // to actually turn the camera toward the origin every frame -- which
+  // kept working even with rotate/pan/zoom all disabled on it, since
+  // update() unconditionally repositions+reorients regardless of those
+  // flags. Removing OrbitControls (see the comment in init()) dropped that
+  // silently-relied-on side effect: camera.quaternion was left frozen at
+  // whatever it last was instead of tracking camLat/camLon, so the
+  // rendered view (real camera.matrixWorld) and all the analytical ray/
+  // projection math elsewhere in this file (which assumes a true look-at-
+  // origin orientation) quietly diverged from each other -- confirmed by
+  // instrumented testing: projecting the exact point just grabbed under
+  // the cursor, with zero mouse movement since, landed ~190px away from
+  // the cursor instead of on it. Explicit here now, not implicit anywhere.
+  camera.lookAt(0, 0, 0);
 }
 
 let dragging = false;
@@ -4863,6 +4879,15 @@ function animate() {
     offset.setLength(eased);
     camera.position.copy(offset);
   }
+  // Belt-and-suspenders re-orientation: the distance-only easing just above
+  // moves the camera purely radially (same direction from the origin, only
+  // its length changes), which doesn't actually change the look direction
+  // -- but re-asserting it here, once, right before render, means this
+  // frame's render is guaranteed correctly oriented regardless of which of
+  // the branches above ran (or if a future edit adds one that moves the
+  // camera without going through applyCamLatLon). Cheap; do it unconditionally.
+  camera.up.set(0, 1, 0);
+  camera.lookAt(0, 0, 0);
   updateLabelOpacity();
   updateRouteCardPosition();
   renderer.render(scene, camera);
